@@ -1,0 +1,273 @@
+"""Interface visual da 'loja' (segunda janela), renderizada com Pillow."""
+
+from __future__ import annotations
+
+from enum import Enum
+
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+
+
+class Screen(Enum):
+    MENU = 1
+    NOVIDADES = 2
+    CARRINHO = 3
+    NOTICIAS = 4
+
+
+def _load_fonts():
+    candidates = [
+        ("C:/Windows/Fonts/segoeuib.ttf", "C:/Windows/Fonts/segoeui.ttf"),
+        ("C:/Windows/Fonts/seguiemj.ttf", "C:/Windows/Fonts/segoeui.ttf"),
+    ]
+    for bold_path, reg_path in candidates:
+        try:
+            return (
+                ImageFont.truetype(bold_path, 38),
+                ImageFont.truetype(reg_path, 22),
+                ImageFont.truetype(reg_path, 18),
+                ImageFont.truetype(reg_path, 15),
+            )
+        except OSError:
+            continue
+    d = ImageFont.load_default()
+    return d, d, d, d
+
+
+_FONT_TITLE, _FONT_SUB, _FONT_BODY, _FONT_SMALL = _load_fonts()
+
+# Altura reservada para a barra “como voltar” (telas internas).
+BACK_ZONE_H = 128
+
+
+def _lerp_color(c1: tuple[int, int, int], c2: tuple[int, int, int], t: float) -> tuple[int, int, int]:
+    return (
+        int(c1[0] + (c2[0] - c1[0]) * t),
+        int(c1[1] + (c2[1] - c1[1]) * t),
+        int(c1[2] + (c2[2] - c1[2]) * t),
+    )
+
+
+def _gradient_bg(img: Image.Image, top: tuple[int, int, int], bottom: tuple[int, int, int]) -> None:
+    px = img.load()
+    w, h = img.size
+    for y in range(h):
+        t = y / max(h - 1, 1)
+        c = _lerp_color(top, bottom, t)
+        for x in range(w):
+            px[x, y] = c
+
+
+def _round_rect(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[int, int, int, int],
+    radius: int,
+    fill: tuple[int, int, int],
+    outline: tuple[int, int, int] | None = None,
+    width: int = 2,
+) -> None:
+    draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=width)
+
+
+def render_store(
+    width: int,
+    height: int,
+    screen: Screen,
+    gesture_label: str | None = None,
+) -> np.ndarray:
+    img = Image.new("RGB", (width, height))
+    _gradient_bg(img, (45, 27, 78), (18, 58, 92))
+
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    for i in range(0, width + 120, 140):
+        od.ellipse((i - 60, height // 3, i + 80, height + 100), fill=(255, 200, 120, 25))
+    img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+    draw = ImageDraw.Draw(img)
+
+    margin = 28
+
+    if screen is Screen.MENU:
+        draw.text((margin, 72), "Olá Lucas!", font=_FONT_TITLE, fill=(255, 248, 240))
+        draw.text(
+            (margin, 128),
+            "O que gostaria de fazer hoje?",
+            font=_FONT_SUB,
+            fill=(230, 220, 255),
+        )
+
+        cards = [
+            ("🆕", "Produtos novos", "Polegar bem para cima (fora do punho)"),
+            ("✌️", "Meu carrinho", "Faça o sinal de paz (2 dedos)"),
+            ("🖐️", "Notícias do dia", "Abra a palma da mão"),
+        ]
+        y0 = 188
+        gap = 14
+        card_h = 102
+        for emoji, title, hint in cards:
+            _round_rect(
+                draw,
+                (margin, y0, width - margin, y0 + card_h),
+                22,
+                fill=(88, 72, 118),
+                outline=(210, 185, 255),
+                width=2,
+            )
+            draw.text((margin + 20, y0 + 18), emoji, font=_FONT_TITLE, fill=(255, 255, 255))
+            draw.text((margin + 88, y0 + 22), title, font=_FONT_SUB, fill=(255, 255, 255))
+            draw.text((margin + 88, y0 + 58), hint, font=_FONT_SMALL, fill=(220, 210, 245))
+            y0 += card_h + gap
+
+        _menu_hint_voltar(draw, margin, width, y0 + 12, height)
+
+        _round_rect(
+            draw,
+            (margin, height - 100, width - margin, height - 14),
+            16,
+            fill=(32, 28, 52),
+            outline=(255, 195, 130),
+            width=1,
+        )
+        draw.text(
+            (margin + 14, height - 82),
+            "Dica: use a janela da câmera ao lado para ver sua mão.",
+            font=_FONT_SMALL,
+            fill=(255, 230, 200),
+        )
+
+    elif screen is Screen.NOVIDADES:
+        draw.text((margin, 72), "✨ Novidades", font=_FONT_TITLE, fill=(255, 248, 240))
+        draw.text((margin, 130), "Destaques fresquinhos pra você", font=_FONT_SUB, fill=(200, 230, 255))
+        items = [
+            ("🎧", "Fones Aura Pro", "Novo · Som espacial"),
+            ("⌚", "Pulseira Fit Neo", "Lançamento · 7 dias bateria"),
+            ("☕", "Caneca térmica Glow", "Edição limitada"),
+        ]
+        y = 188
+        for em, name, sub in items:
+            if y + 90 > height - BACK_ZONE_H - 8:
+                break
+            _round_rect(draw, (margin, y, width - margin, y + 86), 18, (82, 70, 118), (200, 195, 240), 2)
+            draw.text((margin + 16, y + 20), em, font=_FONT_TITLE, fill=(255, 255, 255))
+            draw.text((margin + 72, y + 18), name, font=_FONT_SUB, fill=(255, 255, 255))
+            draw.text((margin + 72, y + 52), sub, font=_FONT_SMALL, fill=(210, 220, 255))
+            y += 98
+        _draw_barra_voltar(draw, margin, width, height)
+
+    elif screen is Screen.CARRINHO:
+        draw.text((margin, 72), "🛒 Seu carrinho", font=_FONT_TITLE, fill=(255, 248, 240))
+        _round_rect(
+            draw,
+            (margin, 148, width - margin, height - BACK_ZONE_H - 24),
+            24,
+            (58, 72, 98),
+            (110, 210, 170),
+            2,
+        )
+        draw.text((margin + 24, 228), "Tudo tranquilo por aqui!", font=_FONT_SUB, fill=(255, 255, 255))
+        draw.text(
+            (margin + 24, 264),
+            "Quando você escolher produtos nas novidades,",
+            font=_FONT_BODY,
+            fill=(220, 235, 255),
+        )
+        draw.text(
+            (margin + 24, 290),
+            "eles aparecerão neste espaço.",
+            font=_FONT_BODY,
+            fill=(220, 235, 255),
+        )
+        _draw_barra_voltar(draw, margin, width, height)
+
+    elif screen is Screen.NOTICIAS:
+        draw.text((margin, 72), "📰 Notícias do dia", font=_FONT_TITLE, fill=(255, 248, 240))
+        news = [
+            "Tech: IA generativa acelera protótipos em hackathons.",
+            "Lifestyle: cafeterias com desconto para quem usa transporte verde.",
+            "Curiosidade: lojas físicas misturam gestos e telas interativas.",
+        ]
+        y = 152
+        for line in news:
+            if y + 76 > height - BACK_ZONE_H - 8:
+                break
+            _round_rect(draw, (margin, y, width - margin, y + 72), 16, (78, 65, 102), (230, 165, 115), 2)
+            draw.text((margin + 18, y + 22), line, font=_FONT_SMALL, fill=(255, 252, 245))
+            y += 84
+        _draw_barra_voltar(draw, margin, width, height)
+
+    if gesture_label:
+        pill_w = min(width - 2 * margin, 360)
+        _round_rect(
+            draw,
+            (width - margin - pill_w, 16, width - margin, 54),
+            16,
+            fill=(25, 35, 55),
+            outline=(120, 255, 190),
+            width=1,
+        )
+        draw.text(
+            (width - margin - pill_w + 12, 26),
+            gesture_label[:52],
+            font=_FONT_SMALL,
+            fill=(170, 255, 210),
+        )
+
+    return cv2_compatible(img)
+
+
+def _menu_hint_voltar(
+    draw: ImageDraw.ImageDraw,
+    margin: int,
+    width: int,
+    top: int,
+    height: int,
+) -> None:
+    """Lembrete no menu: como voltar quando estiver dentro de uma seção."""
+    box = (margin, top, width - margin, top + 72)
+    _round_rect(draw, box, 18, (55, 42, 85), (255, 165, 90), 2)
+    draw.text((margin + 16, top + 12), "↩ Voltar à tela anterior", font=_FONT_SUB, fill=(255, 230, 200))
+    draw.text(
+        (margin + 16, top + 40),
+        "Dentro de Novidades, Carrinho ou Notícias: use 🔙 punho fechado (~0,5 s) → volta ao menu.",
+        font=_FONT_SMALL,
+        fill=(235, 220, 255),
+    )
+
+
+def _draw_barra_voltar(draw: ImageDraw.ImageDraw, margin: int, width: int, height: int) -> None:
+    """Faixa inferior fixa: gesto obrigatório para voltar (sempre visível nas telas internas)."""
+    top = height - BACK_ZONE_H
+    _round_rect(
+        draw,
+        (margin, top, width - margin, height - 10),
+        20,
+        fill=(42, 28, 58),
+        outline=(255, 160, 80),
+        width=3,
+    )
+    draw.text((margin + 14, top + 8), "🔙", font=_FONT_TITLE, fill=(255, 230, 160))
+    draw.text((margin + 58, top + 10), "VOLTAR", font=_FONT_SUB, fill=(255, 200, 130))
+    draw.text((margin + 168, top + 8), "✊", font=_FONT_TITLE, fill=(255, 255, 255))
+    draw.text(
+        (margin + 226, top + 12),
+        "Gesto para voltar à tela anterior",
+        font=_FONT_SUB,
+        fill=(255, 248, 240),
+    )
+    draw.text(
+        (margin + 14, top + 46),
+        "Feche a mão (punho). Mantenha firme cerca de meio segundo.",
+        font=_FONT_BODY,
+        fill=(220, 210, 245),
+    )
+    draw.text(
+        (margin + 14, top + 72),
+        "→ Retorna ao menu principal (tela anterior neste fluxo).",
+        font=_FONT_SMALL,
+        fill=(180, 255, 200),
+    )
+
+
+def cv2_compatible(pil_img: Image.Image) -> np.ndarray:
+    rgb = np.array(pil_img)
+    return rgb[:, :, ::-1].copy()
