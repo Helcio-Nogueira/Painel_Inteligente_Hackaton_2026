@@ -40,6 +40,76 @@ _FONT_TITLE, _FONT_SUB, _FONT_BODY, _FONT_SMALL = _load_fonts()
 # Altura reservada para a barra “como voltar” (telas internas).
 BACK_ZONE_H = 128
 
+# Produtos em Novidades (id estável para carrinho / hit-test)
+NOVIDADES_MARGIN = 28
+NOVIDADES_Y0 = 188
+NOVIDADES_ROW_H = 86
+NOVIDADES_ROW_GAP = 98
+
+NOVIDADES_PRODUCTS: list[tuple[str, str, str, str]] = [
+    ("aura", "🎧", "Fones Aura Pro", "Novo · Som espacial"),
+    ("fitneo", "⌚", "Pulseira Fit Neo", "Lançamento · 7 dias bateria"),
+    ("caneca", "☕", "Caneca térmica Glow", "Edição limitada"),
+    ("lamp", "💡", "Lâmpada smart Aura", "RGB · voz e app"),
+]
+
+
+def novidades_product_regions(width: int, height: int) -> list[tuple[str, tuple[int, int, int, int]]]:
+    """Retorna (id_produto, (x1, y1, x2, y2)) em pixels, alinhado ao desenho da tela Novidades."""
+    margin = NOVIDADES_MARGIN
+    out: list[tuple[str, tuple[int, int, int, int]]] = []
+    y = NOVIDADES_Y0
+    for pid, _em, _n, _s in NOVIDADES_PRODUCTS:
+        if y + NOVIDADES_ROW_H > height - BACK_ZONE_H - 8:
+            break
+        out.append((pid, (margin, y, width - margin, y + NOVIDADES_ROW_H)))
+        y += NOVIDADES_ROW_GAP
+    return out
+
+
+def resolve_novidades_hover(
+    gaze_xy: tuple[int, int] | None,
+    width: int,
+    height: int,
+) -> str | None:
+    """
+    Produto sob o olhar: hit-test com margem + fallback por faixa vertical
+    (o gaze costuma ser impreciso; sem isso a pinça não adiciona ao carrinho).
+    """
+    if gaze_xy is None:
+        return None
+    gx, gy = gaze_xy
+    regions = novidades_product_regions(width, height)
+    if not regions:
+        return None
+    pad_x = 28
+    pad_y = 22
+    for pid, (x1, y1, x2, y2) in regions:
+        if x1 - pad_x <= gx <= x2 + pad_x and y1 - pad_y <= gy <= y2 + pad_y:
+            return pid
+    for pid, (x1, y1, x2, y2) in regions:
+        if y1 <= gy <= y2 and x1 - 8 <= gx <= x2 + 8:
+            return pid
+    best_id: str | None = None
+    best_d = 1e9
+    for pid, (x1, y1, x2, y2) in regions:
+        cy = (y1 + y2) // 2
+        cx = (x1 + x2) // 2
+        d = abs(gy - cy) + abs(gx - cx) * 0.35
+        if d < best_d:
+            best_d = d
+            best_id = pid
+    if best_id is not None and best_d < max(110, NOVIDADES_ROW_GAP):
+        return best_id
+    return None
+
+
+def product_label(product_id: str) -> str:
+    for pid, _em, name, _sub in NOVIDADES_PRODUCTS:
+        if pid == product_id:
+            return name
+    return product_id
+
 
 def _lerp_color(c1: tuple[int, int, int], c2: tuple[int, int, int], t: float) -> tuple[int, int, int]:
     return (
@@ -79,6 +149,8 @@ def render_store(
     greeting_name: str | None = None,
     register_countdown: float | None = None,
     register_feedback: str | None = None,
+    novidades_hover_id: str | None = None,
+    cart_lines: list[str] | None = None,
 ) -> np.ndarray:
     img = Image.new("RGB", (width, height))
     _gradient_bg(img, (45, 27, 78), (18, 58, 92))
@@ -145,20 +217,25 @@ def render_store(
     elif screen is Screen.NOVIDADES:
         draw.text((margin, 72), "✨ Novidades", font=_FONT_TITLE, fill=(255, 248, 240))
         draw.text((margin, 130), "Destaques fresquinhos pra você", font=_FONT_SUB, fill=(200, 230, 255))
-        items = [
-            ("🎧", "Fones Aura Pro", "Novo · Som espacial"),
-            ("⌚", "Pulseira Fit Neo", "Lançamento · 7 dias bateria"),
-            ("☕", "Caneca térmica Glow", "Edição limitada"),
-        ]
-        y = 188
-        for em, name, sub in items:
-            if y + 90 > height - BACK_ZONE_H - 8:
+        draw.text(
+            (margin, 156),
+            "Olhe o produto + 👌 A-OK (O com polegar e indicador, 3 dedos esticados)",
+            font=_FONT_SMALL,
+            fill=(255, 230, 200),
+        )
+        y = NOVIDADES_Y0
+        for pid, em, name, sub in NOVIDADES_PRODUCTS:
+            if y + NOVIDADES_ROW_H > height - BACK_ZONE_H - 8:
                 break
-            _round_rect(draw, (margin, y, width - margin, y + 86), 18, (82, 70, 118), (200, 195, 240), 2)
+            hover = novidades_hover_id == pid
+            fill = (100, 85, 140) if hover else (82, 70, 118)
+            outline = (255, 220, 120) if hover else (200, 195, 240)
+            ow = 3 if hover else 2
+            _round_rect(draw, (margin, y, width - margin, y + NOVIDADES_ROW_H), 18, fill, outline, ow)
             draw.text((margin + 16, y + 20), em, font=_FONT_TITLE, fill=(255, 255, 255))
             draw.text((margin + 72, y + 18), name, font=_FONT_SUB, fill=(255, 255, 255))
             draw.text((margin + 72, y + 52), sub, font=_FONT_SMALL, fill=(210, 220, 255))
-            y += 98
+            y += NOVIDADES_ROW_GAP
         _draw_barra_voltar(draw, margin, width, height)
 
     elif screen is Screen.CARRINHO:
@@ -171,19 +248,28 @@ def render_store(
             (110, 210, 170),
             2,
         )
-        draw.text((margin + 24, 228), "Tudo tranquilo por aqui!", font=_FONT_SUB, fill=(255, 255, 255))
-        draw.text(
-            (margin + 24, 264),
-            "Quando você escolher produtos nas novidades,",
-            font=_FONT_BODY,
-            fill=(220, 235, 255),
-        )
-        draw.text(
-            (margin + 24, 290),
-            "eles aparecerão neste espaço.",
-            font=_FONT_BODY,
-            fill=(220, 235, 255),
-        )
+        lines = cart_lines or []
+        if not lines:
+            draw.text((margin + 24, 228), "Tudo tranquilo por aqui!", font=_FONT_SUB, fill=(255, 255, 255))
+            draw.text(
+                (margin + 24, 264),
+                "Em Novidades, olhe um produto e faça o gesto 👌 A-OK",
+                font=_FONT_BODY,
+                fill=(220, 235, 255),
+            )
+            draw.text(
+                (margin + 24, 290),
+                "para adicionar ao carrinho.",
+                font=_FONT_BODY,
+                fill=(220, 235, 255),
+            )
+        else:
+            cy = 200
+            for line in lines:
+                if cy > height - BACK_ZONE_H - 40:
+                    break
+                draw.text((margin + 24, cy), f"• {line}", font=_FONT_BODY, fill=(255, 255, 255))
+                cy += 26
         _draw_barra_voltar(draw, margin, width, height)
 
     elif screen is Screen.NOTICIAS:
