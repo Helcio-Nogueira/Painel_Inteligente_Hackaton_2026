@@ -9,10 +9,11 @@ from typing import Any
 
 class Gesture(Enum):
     NONE = "none"
-    THUMB_UP = "thumb_up"  # novidades (polegar claro para cima)
+    THUMB_UP = "thumb_up"  # novidades
     PEACE = "peace"  # carrinho
     OPEN_PALM = "open_palm"  # notícias
-    FIST = "fist"  # voltar (punho: sem dedos estendidos)
+    FIST = "fist"  # voltar
+    INDEX_POINT = "index_point"  # registrar rosto (apenas indicador)
 
 
 def _dist(a: Any, b: Any) -> float:
@@ -69,6 +70,10 @@ def classify_hand(lm: list) -> Gesture:
     # 4) Punho: nenhum dedo longo estendido e polegar não é thumbs-up
     if not i and not m and not r and not p and not t:
         return Gesture.FIST
+
+    # 5) Apenas indicador estendido (registrar rosto)
+    if i and not m and not r and not p and not t:
+        return Gesture.INDEX_POINT
 
     return Gesture.NONE
 

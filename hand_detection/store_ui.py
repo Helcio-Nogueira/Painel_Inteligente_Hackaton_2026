@@ -13,6 +13,7 @@ class Screen(Enum):
     NOVIDADES = 2
     CARRINHO = 3
     NOTICIAS = 4
+    REGISTRAR = 5  # Registrar rosto (gesto indicador)
 
 
 def _load_fonts():
@@ -74,6 +75,10 @@ def render_store(
     height: int,
     screen: Screen,
     gesture_label: str | None = None,
+    gaze_xy: tuple[int, int] | None = None,
+    greeting_name: str | None = None,
+    register_countdown: float | None = None,
+    register_feedback: str | None = None,
 ) -> np.ndarray:
     img = Image.new("RGB", (width, height))
     _gradient_bg(img, (45, 27, 78), (18, 58, 92))
@@ -88,9 +93,10 @@ def render_store(
     margin = 28
 
     if screen is Screen.MENU:
-        draw.text((margin, 72), "Olá Lucas!", font=_FONT_TITLE, fill=(255, 248, 240))
+        if greeting_name:
+            draw.text((margin, 72), f"Olá {greeting_name}!", font=_FONT_TITLE, fill=(255, 248, 240))
         draw.text(
-            (margin, 128),
+            (margin, 72 if not greeting_name else 128),
             "O que gostaria de fazer hoje?",
             font=_FONT_SUB,
             fill=(230, 220, 255),
@@ -100,6 +106,7 @@ def render_store(
             ("🆕", "Produtos novos", "Polegar bem para cima (fora do punho)"),
             ("✌️", "Meu carrinho", "Faça o sinal de paz (2 dedos)"),
             ("🖐️", "Notícias do dia", "Abra a palma da mão"),
+            ("👆", "Registrar meu rosto", "Aponte só o indicador"),
         ]
         y0 = 188
         gap = 14
@@ -195,6 +202,47 @@ def render_store(
             y += 84
         _draw_barra_voltar(draw, margin, width, height)
 
+    elif screen is Screen.REGISTRAR:
+        draw.text((margin, 72), "👤 Registrar rosto", font=_FONT_TITLE, fill=(255, 248, 240))
+        if register_countdown is not None and register_countdown > 0:
+            sec = int(register_countdown) + 1
+            draw.text(
+                (margin, 140),
+                f"Posicione seu rosto na câmera e aguarde... {sec}s",
+                font=_FONT_SUB,
+                fill=(255, 230, 180),
+            )
+            if register_feedback:
+                draw.text(
+                    (margin, 172),
+                    f"→ {register_feedback}",
+                    font=_FONT_SMALL,
+                    fill=(255, 210, 140),
+                )
+            _round_rect(
+                draw,
+                (margin, 200, width - margin, 260),
+                16,
+                fill=(60, 45, 90),
+                outline=(200, 150, 255),
+                width=2,
+            )
+            pct = max(0, 1.0 - register_countdown / 5.0)
+            bar_w = (width - 2 * margin - 32) * pct
+            draw.rectangle(
+                (margin + 16, 218, margin + 16 + int(bar_w), 242),
+                fill=(150, 100, 255),
+            )
+        else:
+            msg = register_feedback or "Aguardando rosto... Posicione-se na câmera."
+            draw.text(
+                (margin, 140),
+                msg,
+                font=_FONT_SUB,
+                fill=(255, 230, 180),
+            )
+        _draw_barra_voltar(draw, margin, width, height)
+
     if gesture_label:
         pill_w = min(width - 2 * margin, 360)
         _round_rect(
@@ -210,6 +258,15 @@ def render_store(
             gesture_label[:52],
             font=_FONT_SMALL,
             fill=(170, 255, 210),
+        )
+
+    if gaze_xy is not None:
+        gx, gy = gaze_xy
+        r = 14
+        draw.ellipse(
+            (gx - r, gy - r, gx + r, gy + r),
+            fill=(255, 80, 60),
+            outline=(255, 255, 255),
         )
 
     return cv2_compatible(img)
