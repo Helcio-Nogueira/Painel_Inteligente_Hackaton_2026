@@ -86,11 +86,17 @@ def smooth_gaze(
 
 # Calibração do mapeamento gaze → tela
 GAZE_SENSITIVITY_X = 3.65  # Horizontal um pouco mais sensível
-GAZE_SENSITIVITY_Y_UP = 2.70  # Olhar para cima um pouco mais responsivo
-GAZE_SENSITIVITY_Y_DOWN = 1.35  # Olhar para baixo menos agressivo
-CENTER_X, CENTER_Y = 0.5, 0.60  # Centro vertical levemente mais baixo
+# gy baixo = olhar para cima (docstring) → y na tela menor (topo)
+GAZE_SENSITIVITY_Y_UP = 3.5
+GAZE_SENSITIVITY_Y_DOWN = 1.25  # Olhar para baixo um pouco menos agressivo
+CENTER_X = 0.5
+# gy médio com rosto reto à câmera olhando para a área central (NÃO é o meio da tela).
+# Se o cursor ficar alto em repouso, suba (ex. 0.44); se ficar baixo, desça (ex. 0.38).
+NEUTRAL_GY = 0.42
 # Curva suave: pequenos movimentos amplificam um pouco mais (evita zona morta no centro)
 _POWER = 0.92  # < 1 amplifica perto do centro
+# Onde queremos o cursor em repouso na vertical (meio da janela)
+_SCREEN_CY = 0.5
 
 
 def gaze_to_screen(
@@ -106,20 +112,30 @@ def gaze_to_screen(
         return None
     gx, gy = gaze
 
-    def _remap(v: float, center: float, sensitivity: float) -> float:
-        d = v - center
+    def _remap(
+        v: float,
+        in_center: float,
+        sensitivity: float,
+        out_center: float | None = None,
+    ) -> float:
+        """Delta em torno de in_center; escala em torno de out_center (tela) se informado."""
+        oc = in_center if out_center is None else out_center
+        d = v - in_center
         sign = 1.0 if d >= 0 else -1.0
         abs_d = abs(d)
         curved = sign * (abs_d ** _POWER)
-        return center + curved * sensitivity
+        return oc + curved * sensitivity
 
     cx = _remap(gx, CENTER_X, GAZE_SENSITIVITY_X)
-    # Corrige eixo vertical: olhar para cima deve mover a bolinha para cima.
-    gy_inv = 1.0 - gy
-    y_sensitivity = GAZE_SENSITIVITY_Y_UP if gy_inv < CENTER_Y else GAZE_SENSITIVITY_Y_DOWN
-    cy = _remap(gy_inv, CENTER_Y, y_sensitivity)
+    # Neutro da íris (NEUTRAL_GY) → meio da tela (_SCREEN_CY); só movimento da íris varia em torno disso.
+    # Com y = (1-cy)*h, “subir” na tela corresponde a gy acima do neutro neste pipeline.
+    y_sensitivity = (
+        GAZE_SENSITIVITY_Y_UP if gy >= NEUTRAL_GY else GAZE_SENSITIVITY_Y_DOWN
+    )
+    cy = _remap(gy, NEUTRAL_GY, y_sensitivity, _SCREEN_CY)
     x = max(0, min(width - 1, int(cx * width)))
-    y = max(0, min(height - 1, int(cy * height)))
+    # Eixo Y da íris neste modelo fica invertido em relação à tela (cima/baixo trocados).
+    y = max(0, min(height - 1, int((1.0 - cy) * height)))
     return (x, y)
 
 

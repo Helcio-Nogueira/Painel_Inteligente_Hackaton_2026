@@ -10,6 +10,7 @@ Gestos (mão bem visível, ~0,4 s estáveis):
 
 Uso: .venv\\Scripts\\python.exe main.py   ou   run.bat
 Q / ESC na janela da câmera: sair.
+Sem rosto na câmera por ~5 s (com modelo facial ativo): encerra sozinho.
 """
 
 from __future__ import annotations
@@ -30,7 +31,12 @@ from tkinter import simpledialog
 
 from face_registry import clear_registry, encode_face, recognize_face, register_face_multiple_encodings
 from gestures import Gesture, classify_from_result
-from store_ui import Screen, product_label, render_store, resolve_novidades_hover
+from store_ui import (
+    Screen,
+    render_store,
+    resolve_carrinho_hover,
+    resolve_novidades_hover,
+)
 
 # Eye tracking: ponto vermelho na loja indica direção aproximada do olhar (íris).
 # Para desativar e voltar ao comportamento anterior: EYE_TRACKING_ENABLED = False
@@ -59,6 +65,9 @@ FACE_MODEL_URL = (
 WIN_CAM = "Camera — suas maos"
 WIN_STORE = "Loja Cap Vivo"
 STORE_W, STORE_H = 540, 820
+
+# Encerra o programa se não houver rosto (com modelo facial carregado) por este tempo.
+NO_FACE_EXIT_S = 5.0
 
 # Qualidade de frame (valores relaxados para garantir captura)
 SHARPNESS_THRESHOLD = 25
@@ -493,10 +502,13 @@ def main() -> int:
     depth_iod_smooth: float | None = None
     depth_key_curr: str | None = None
     depth_label_curr: str = ""
-    cart_items: list[str] = []
+    cart_product_ids: list[str] = []
     last_loop_t = time.perf_counter()
     novidades_hover_sticky_id: str | None = None
     novidades_hover_sticky_until: float = 0.0
+    carrinho_hover_sticky_id: str | None = None
+    carrinho_hover_sticky_until: float = 0.0
+    no_face_accum_s = 0.0
 
     with HandLandmarker.create_from_options(hand_options) as landmarker:
         try:
@@ -530,8 +542,25 @@ def main() -> int:
                     except Exception:
                         pass
 
+                if face_landmarker_ctx is not None:
+                    has_face = bool(
+                        face_landmarks_for_draw and len(face_landmarks_for_draw) > 0
+                    )
+                    if has_face:
+                        no_face_accum_s = 0.0
+                    else:
+                        no_face_accum_s += dt
+                        if no_face_accum_s >= NO_FACE_EXIT_S:
+                            print(
+                                "Encerrando: nenhum rosto detectado por "
+                                f"{NO_FACE_EXIT_S:.0f} s.",
+                                file=sys.stderr,
+                            )
+                            break
+
                 gesture = classify_from_result(result.hand_landmarks)
                 hover_product_id: str | None = None
+                hover_carrinho_id: str | None = None
                 if screen is Screen.NOVIDADES:
                     hov = resolve_novidades_hover(gaze_xy, STORE_W, STORE_H)
                     if hov:
@@ -542,9 +571,27 @@ def main() -> int:
                         if now_loop < novidades_hover_sticky_until
                         else None
                     )
+                    carrinho_hover_sticky_id = None
+                    carrinho_hover_sticky_until = 0.0
+                elif screen is Screen.CARRINHO:
+                    novidades_hover_sticky_id = None
+                    novidades_hover_sticky_until = 0.0
+                    hov_c = resolve_carrinho_hover(
+                        gaze_xy, STORE_W, STORE_H, cart_product_ids
+                    )
+                    if hov_c:
+                        carrinho_hover_sticky_id = hov_c
+                        carrinho_hover_sticky_until = now_loop + 0.65
+                    hover_carrinho_id = hov_c or (
+                        carrinho_hover_sticky_id
+                        if now_loop < carrinho_hover_sticky_until
+                        else None
+                    )
                 else:
                     novidades_hover_sticky_id = None
                     novidades_hover_sticky_until = 0.0
+                    carrinho_hover_sticky_id = None
+                    carrinho_hover_sticky_until = 0.0
 
                 fired = stable.tick(gesture)
                 pinch_target_id = hover_product_id
@@ -552,8 +599,18 @@ def main() -> int:
                     fired is Gesture.PINCH_OK
                     and screen is Screen.NOVIDADES
                     and pinch_target_id
+                    and pinch_target_id not in cart_product_ids
                 ):
-                    cart_items.append(product_label(pinch_target_id))
+                    cart_product_ids.append(pinch_target_id)
+                elif (
+                    fired is Gesture.PINCH_OK
+                    and screen is Screen.CARRINHO
+                    and hover_carrinho_id
+                ):
+                    try:
+                        cart_product_ids.remove(hover_carrinho_id)
+                    except ValueError:
+                        pass
                 elif fired is not None:
                     screen = _apply_navigation(screen, fired)
                     if screen is Screen.MENU and register_countdown_start is not None:
@@ -829,7 +886,8 @@ def main() -> int:
                     register_countdown=register_countdown if screen is Screen.REGISTRAR else None,
                     register_feedback=register_feedback if screen is Screen.REGISTRAR else None,
                     novidades_hover_id=hover_product_id if screen is Screen.NOVIDADES else None,
-                    cart_lines=cart_items if screen is Screen.CARRINHO else None,
+                    cart_product_ids=cart_product_ids,
+                    carrinho_hover_id=hover_carrinho_id if screen is Screen.CARRINHO else None,
                 )
                 cv2.imshow(WIN_CAM, frame)
                 cv2.imshow(WIN_STORE, store_frame)

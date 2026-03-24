@@ -104,11 +104,74 @@ def resolve_novidades_hover(
     return None
 
 
+# Lista do carrinho: mesma largura que a caixa principal; alinhado ao desenho em render_store.
+CARRINHO_LIST_Y0 = 176
+CARRINHO_ROW_H = 54
+CARRINHO_ROW_GAP = 12
+
+
+def carrinho_item_regions(
+    width: int, height: int, cart_product_ids: list[str]
+) -> list[tuple[str, tuple[int, int, int, int]]]:
+    """(product_id, box) para cada linha do carrinho (hit-test gaze + pinça)."""
+    margin = NOVIDADES_MARGIN
+    out: list[tuple[str, tuple[int, int, int, int]]] = []
+    y = CARRINHO_LIST_Y0
+    for pid in cart_product_ids:
+        if y + CARRINHO_ROW_H > height - BACK_ZONE_H - 24:
+            break
+        out.append((pid, (margin, y, width - margin, y + CARRINHO_ROW_H)))
+        y += CARRINHO_ROW_H + CARRINHO_ROW_GAP
+    return out
+
+
+def resolve_carrinho_hover(
+    gaze_xy: tuple[int, int] | None,
+    width: int,
+    height: int,
+    cart_product_ids: list[str],
+) -> str | None:
+    """Qual item do carrinho está sob o olhar (com margens, como em Novidades)."""
+    if gaze_xy is None or not cart_product_ids:
+        return None
+    gx, gy = gaze_xy
+    regions = carrinho_item_regions(width, height, cart_product_ids)
+    if not regions:
+        return None
+    pad_x = 28
+    pad_y = 20
+    for pid, (x1, y1, x2, y2) in regions:
+        if x1 - pad_x <= gx <= x2 + pad_x and y1 - pad_y <= gy <= y2 + pad_y:
+            return pid
+    for pid, (x1, y1, x2, y2) in regions:
+        if y1 <= gy <= y2 and x1 - 8 <= gx <= x2 + 8:
+            return pid
+    best_id: str | None = None
+    best_d = 1e9
+    for pid, (x1, y1, x2, y2) in regions:
+        cy = (y1 + y2) // 2
+        cx = (x1 + x2) // 2
+        d = abs(gy - cy) + abs(gx - cx) * 0.35
+        if d < best_d:
+            best_d = d
+            best_id = pid
+    if best_id is not None and best_d < max(100, CARRINHO_ROW_GAP + CARRINHO_ROW_H):
+        return best_id
+    return None
+
+
 def product_label(product_id: str) -> str:
     for pid, _em, name, _sub in NOVIDADES_PRODUCTS:
         if pid == product_id:
             return name
     return product_id
+
+
+def product_row(product_id: str) -> tuple[str, str, str, str] | None:
+    for row in NOVIDADES_PRODUCTS:
+        if row[0] == product_id:
+            return row
+    return None
 
 
 def _lerp_color(c1: tuple[int, int, int], c2: tuple[int, int, int], t: float) -> tuple[int, int, int]:
@@ -150,7 +213,8 @@ def render_store(
     register_countdown: float | None = None,
     register_feedback: str | None = None,
     novidades_hover_id: str | None = None,
-    cart_lines: list[str] | None = None,
+    cart_product_ids: list[str] | None = None,
+    carrinho_hover_id: str | None = None,
 ) -> np.ndarray:
     img = Image.new("RGB", (width, height))
     _gradient_bg(img, (45, 27, 78), (18, 58, 92))
@@ -219,37 +283,57 @@ def render_store(
         draw.text((margin, 130), "Destaques fresquinhos pra você", font=_FONT_SUB, fill=(200, 230, 255))
         draw.text(
             (margin, 156),
-            "Olhe o produto + 👌 A-OK (O com polegar e indicador, 3 dedos esticados)",
+            "Olhe o produto + 👌 A-OK — cada item só entra uma vez no carrinho",
             font=_FONT_SMALL,
             fill=(255, 230, 200),
         )
+        in_cart = set(cart_product_ids or [])
         y = NOVIDADES_Y0
         for pid, em, name, sub in NOVIDADES_PRODUCTS:
             if y + NOVIDADES_ROW_H > height - BACK_ZONE_H - 8:
                 break
             hover = novidades_hover_id == pid
+            added = pid in in_cart
             fill = (100, 85, 140) if hover else (82, 70, 118)
+            if added:
+                fill = (55, 95, 75) if hover else (48, 82, 68)
             outline = (255, 220, 120) if hover else (200, 195, 240)
+            if added:
+                outline = (140, 255, 170) if hover else (100, 200, 130)
             ow = 3 if hover else 2
             _round_rect(draw, (margin, y, width - margin, y + NOVIDADES_ROW_H), 18, fill, outline, ow)
-            draw.text((margin + 16, y + 20), em, font=_FONT_TITLE, fill=(255, 255, 255))
-            draw.text((margin + 72, y + 18), name, font=_FONT_SUB, fill=(255, 255, 255))
-            draw.text((margin + 72, y + 52), sub, font=_FONT_SMALL, fill=(210, 220, 255))
+            if added:
+                draw.text(
+                    (margin + 20, y + 28),
+                    "Adicionado ao carrinho!",
+                    font=_FONT_SUB,
+                    fill=(200, 255, 215),
+                )
+            else:
+                draw.text((margin + 16, y + 20), em, font=_FONT_TITLE, fill=(255, 255, 255))
+                draw.text((margin + 72, y + 18), name, font=_FONT_SUB, fill=(255, 255, 255))
+                draw.text((margin + 72, y + 52), sub, font=_FONT_SMALL, fill=(210, 220, 255))
             y += NOVIDADES_ROW_GAP
         _draw_barra_voltar(draw, margin, width, height)
 
     elif screen is Screen.CARRINHO:
         draw.text((margin, 72), "🛒 Seu carrinho", font=_FONT_TITLE, fill=(255, 248, 240))
-        _round_rect(
-            draw,
-            (margin, 148, width - margin, height - BACK_ZONE_H - 24),
-            24,
-            (58, 72, 98),
-            (110, 210, 170),
-            2,
+        draw.text(
+            (margin, 128),
+            "Olhe o item + 👌 A-OK para remover do carrinho",
+            font=_FONT_SMALL,
+            fill=(255, 230, 200),
         )
-        lines = cart_lines or []
-        if not lines:
+        c_ids = list(cart_product_ids or [])
+        if not c_ids:
+            _round_rect(
+                draw,
+                (margin, 168, width - margin, height - BACK_ZONE_H - 24),
+                24,
+                (58, 72, 98),
+                (110, 210, 170),
+                2,
+            )
             draw.text((margin + 24, 228), "Tudo tranquilo por aqui!", font=_FONT_SUB, fill=(255, 255, 255))
             draw.text(
                 (margin + 24, 264),
@@ -264,12 +348,22 @@ def render_store(
                 fill=(220, 235, 255),
             )
         else:
-            cy = 200
-            for line in lines:
-                if cy > height - BACK_ZONE_H - 40:
+            y = CARRINHO_LIST_Y0
+            for pid in c_ids:
+                if y + CARRINHO_ROW_H > height - BACK_ZONE_H - 24:
                     break
-                draw.text((margin + 24, cy), f"• {line}", font=_FONT_BODY, fill=(255, 255, 255))
-                cy += 26
+                row = product_row(pid)
+                em, name, sub = ("📦", product_label(pid), "") if row is None else (row[1], row[2], row[3])
+                hover = carrinho_hover_id == pid
+                fill = (88, 105, 135) if hover else (70, 88, 118)
+                outline = (255, 200, 120) if hover else (130, 200, 255)
+                ow = 3 if hover else 2
+                _round_rect(draw, (margin, y, width - margin, y + CARRINHO_ROW_H), 16, fill, outline, ow)
+                draw.text((margin + 14, y + 10), em, font=_FONT_TITLE, fill=(255, 255, 255))
+                draw.text((margin + 64, y + 8), name, font=_FONT_SUB, fill=(255, 255, 255))
+                if sub:
+                    draw.text((margin + 64, y + 32), sub, font=_FONT_SMALL, fill=(210, 220, 255))
+                y += CARRINHO_ROW_H + CARRINHO_ROW_GAP
         _draw_barra_voltar(draw, margin, width, height)
 
     elif screen is Screen.NOTICIAS:
