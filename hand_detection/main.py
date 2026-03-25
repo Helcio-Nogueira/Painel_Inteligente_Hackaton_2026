@@ -11,7 +11,7 @@ Gestos (mão bem visível, ~0,4 s estáveis):
 Uso: .venv\\Scripts\\python.exe main.py   ou   run.bat
 Q / ESC na janela da câmera: sair.
 Sem rosto na câmera por ~5 s (com modelo facial ativo): encerra sozinho e abre o assistente
-cap_assistant (API + Streamlit), salvo CAPVIVO_SKIP_DATA_ASSISTANT=1.
+`cap_assistant` (FastAPI + UI web em pywebview ou navegador), salvo `CAPVIVO_SKIP_DATA_ASSISTANT=1`.
 """
 
 from __future__ import annotations
@@ -432,7 +432,7 @@ def _screen_title(s: Screen) -> str:
 
 
 def _launch_data_assistant() -> None:
-    """Abre API + interface Streamlit (cap_assistant) numa nova consola no Windows."""
+    """Abre `cap_assistant` (API FastAPI + UI web) numa nova consola no Windows."""
     skip = os.environ.get("CAPVIVO_SKIP_DATA_ASSISTANT", "").strip().lower()
     if skip in ("1", "true", "yes", "on"):
         return

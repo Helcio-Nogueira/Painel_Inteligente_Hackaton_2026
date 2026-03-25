@@ -1,1 +1,1 @@
-# Pacote da API + UI Streamlit (Cap Vivo).
+# Pacote da API FastAPI + frontend web estático (Cap Vivo).

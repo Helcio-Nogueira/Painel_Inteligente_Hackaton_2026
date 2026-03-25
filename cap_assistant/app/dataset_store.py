@@ -2,6 +2,8 @@
 
 Objetivo: permitir que a UI carregue um CSV do cliente e o assistente analise padrões.
 Não há persistência em disco e não há multiusuário: é um processo local por sessão.
+
+Nota: o fluxo atual do `app.api` não importa este módulo; mantido para evolução futura.
 """
 
 from __future__ import annotations

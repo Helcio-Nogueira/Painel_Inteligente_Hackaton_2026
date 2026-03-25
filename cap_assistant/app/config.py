@@ -1,4 +1,4 @@
-"""Configurações — baseado no projeto de referência em IAtemporaria/temp_processo_seletivo_cap."""
+"""Configurações — baseado em um projeto de referência (código portado para `cap_assistant/`)."""
 
 from __future__ import annotations
 

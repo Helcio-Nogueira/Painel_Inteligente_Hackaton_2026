@@ -56,11 +56,15 @@ async def mobile_page() -> HTMLResponse:
   <div class="muted">Deixe esta página aberta. Atualiza automaticamente.</div>
   <script>
     async function load(){
+      const el = document.getElementById('content');
       try{
         const res = await fetch('/text');
+        if(!res.ok){ throw new Error('HTTP ' + res.status); }
         const data = await res.json();
-        document.getElementById('content').innerText = data.text || '(vazio)';
-      }catch(e){}
+        el.innerText = data.text || '(vazio)';
+      }catch(e){
+        el.innerText = 'Sem ligação ao PC (rede/IP/firewall). Abra http://IP_DO_PC:8000/ no mesmo Wi‑Fi ou hotspot. No PC: ipconfig → IPv4. Erro: ' + (e && e.message ? e.message : e);
+      }
     }
     setInterval(load, 1000);
     load();

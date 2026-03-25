@@ -1,3 +1,296 @@
+# Cap Vivo 2026 — Assistente com Visão Computacional (Demo Hackathon)
+
+Este repositório documenta e implementa uma demo interativa composta por:
+
+1. **Câmera + “loja” interativa** controlada por **mãos (gestos)** e **rosto/olhar (íris)**.
+2. **Assistente de análise pós-sessão** (LLM via `cap_assistant`) que abre automaticamente quando o cliente **sai da câmera**.
+3. **Painel no celular** (sem Expo/sem build) que mostra o **resumo final** automaticamente, via rede local.
+
+O objetivo do hackathon é entregar um fluxo **simples de demonstrar**, com **baixo risco de falha** em ambiente de competição.
+
+---
+
+## Fluxo de demonstração (o que o juiz vê)
+
+1. Você executa o projeto: abre **dois ecrãs no PC** (câmera + loja).
+2. No celular (Android), você deixa uma página aberta.
+3. O cliente interage na loja usando gestos e olhar.
+4. Quando o cliente **desaparece da câmera** por alguns segundos:
+   - a aplicação fecha as janelas de visualização,
+   - abre o **assistente** no PC,
+   - e **o resumo final** aparece no **painel do celular**.
+
+---
+
+## Pré-requisitos
+
+- **Windows** (10/11).
+- **Webcam** funcionando no PC.
+- Celular **na mesma Wi‑Fi/LAN** do PC.
+- Porta da rede local (firewall) permitindo acesso ao host/porta do relay no PC.
+
+---
+
+## Quickstart (rodar em 2 minutos)
+
+### 1) Rodar a demo (PC)
+
+No diretório do projeto:
+
+```powershell
+cd "C:\Users\lucas\OneDrive\Área de Trabalho\CapVivo2026\hand_detection"
+.\run.bat
+```
+
+O script sobe o ambiente e inicia a aplicação principal.
+
+### 2) Abrir o painel no celular (Android)
+
+1. Descubra o **IPv4** do PC (no Windows):
+   - `ipconfig`
+2. Abra no navegador do Android:
+
+```text
+http://SEU_IP_V4:8000/
+```
+
+Exemplo:
+
+```text
+http://192.168.15.5:8000/
+```
+
+O painel exibirá “**Nenhuma análise ainda**” até chegar a resposta final.
+
+---
+
+## Arquitetura (alto nível)
+
+```mermaid
+flowchart LR
+  A[hand_detection/main.py<br/>Câmera + Loja + Gestos + Olhar] --> B[cap_assistant/run_cap_assistant.py<br/>FastAPI + LLM]
+  A --> C[mobile_relay/app.py<br/>Painel celular: / (HTML), /text, /send]
+  B --> C
+```
+
+### Componentes
+
+- **`hand_detection`**: loop principal (OpenCV + MediaPipe Tasks) e navegação da loja.
+- **`cap_assistant`**: API FastAPI que gera a resposta via LLM (modo demo quando chaves não existem).
+- **`mobile_relay`**: micro-servidor FastAPI que serve a página do celular e mantém o texto “latest” para atualização.
+
+---
+
+## Detalhes do fluxo PC → Celular → Assistente
+
+1. **Ao iniciar** a demo, o `mobile_relay` é executado em background (porta padrão **8000**).
+2. O cliente interage. Ao **sair da câmera**, o `hand_detection` dispara o `cap_assistant`.
+3. O `cap_assistant` gera a resposta do prompt automático e envia o resultado para o `mobile_relay` via HTTP **POST** (`/send`).
+4. A página do celular faz **polling** em `/text` e atualiza o conteúdo automaticamente.
+
+---
+
+## Funcionalidades implementadas (o que está pronto)
+
+### Loja interativa (PC)
+
+- Navegação por gestos de mão (estabilizados por filtro temporal):
+  - polegar para cima: **Novidades**
+  - paz / “V”: **Carrinho**
+  - palma aberta: **Notícias**
+  - punho: volta ao **menu** em telas internas
+  - indicador estendido: fluxo **Registrar rosto**
+  - A‑OK/pinça: adiciona/remove itens no carrinho com auxílio do olhar
+- Renderização da loja via **Pillow**.
+
+### Rastreamento do olhar (íris)
+
+- Mapeamento da posição da íris para coordenadas da loja usando remapeamento com sensibilidade assimétrica.
+- Suavização do gaze para reduzir jitter.
+
+### Registro e qualidade de rosto
+
+- Reconhecimento/registro por landmarks (MediaPipe Face Landmarker).
+- Qualidade mínima antes de salvar:
+  - nitidez (Laplaciano),
+  - brilho médio,
+  - área mínima da face,
+  - centralização no frame.
+- Diálogo de nome via **Tkinter**.
+
+### Encerramento automático e assistente
+
+- Se o modelo facial estiver ativo e não houver rosto por `NO_FACE_EXIT_S` (padrão 5s):
+  - a sessão é exportada para `hand_detection/last_session_summary.json`,
+  - o `cap_assistant` é iniciado,
+  - e a resposta final segue para o celular.
+
+---
+
+## Configuração (variáveis de ambiente)
+
+### `cap_assistant/.env` (opcional para LLM real)
+
+Arquivo exemplo: `cap_assistant/env.example`.
+
+Variáveis principais:
+
+- `OPENAI_API_KEY=` (opcional; se vazio, cai para modo demonstração)
+- `OPENAI_MODEL=gpt-4o-mini`
+- `GROQ_API_KEY=` (opcional)
+- `WEB_SEARCH_ENABLED=false` (opcional)
+- `PAYROLL_DATA_PATH=` (dataset local; padrão `cap_assistant/data/payroll.csv`)
+
+> Observação: a validação do `cap_assistant` exige apenas o dataset local; as chaves de LLM podem ser omitidas para demo.
+
+### Portas / rede
+
+- **Painel celular (`mobile_relay`)**:
+  - porta padrão: `8000`
+  - exposto na LAN (acesso por `http://SEU_IP_V4:8000/`)
+- **API do assistente (`cap_assistant`)**:
+  - porta padrão: `8765`
+  - local no PC (não precisa ser acessada do celular diretamente)
+
+> Em caso de firewall, libere acesso de rede local para Python/Uvicorn na porta `8000`.
+
+---
+
+## Troubleshooting (falhas comuns)
+
+### “O painel abre, mas não atualiza”
+
+1. Confirme que o `hand_detection` ainda está rodando e que o fluxo de “sem rosto” disparou o `cap_assistant`.
+2. Garanta que o painel no celular está aberto na mesma sessão (página aberta).
+3. Se persistir, teste manualmente o relay:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/send" -ContentType "application/json" -Body '{"text":"TESTE OK - chegou no celular"}'
+```
+
+Se o teste atualizar o celular, o canal PC → relay está OK e o problema está no gatilho/execução do assistente.
+
+### “Não abre no celular”
+
+- Verifique se o celular está na **mesma Wi‑Fi/LAN** do PC.
+- Verifique `ipconfig` e use o **IPv4** correto.
+- Libere firewall (rede privada) para a porta **8000**.
+
+---
+
+## Histórico de implementação — demo interativa (`hand_detection`)
+
+Esta seção resume o que foi construído e afinado na aplicação principal, servindo como memória de produto para o hackathon **Cap Vivo 2026**.
+
+### Visão geral
+
+A demo é uma **loja interativa em duas janelas**:
+
+- **Câmera** com desenho de mãos, rosto e íris.
+- **Interface da loja** renderizada com **Pillow**, com navegação por gestos e, em pontos específicos, por olhar aproximado.
+
+### Stack e arranque
+
+- **Python**, **OpenCV**, **MediaPipe Tasks API** (`HandLandmarker` + `FaceLandmarker`), **Pillow**, **NumPy**.
+- Modelos `.task` são descarregados automaticamente no Windows via download HTTP para cache local.
+- Execução típica: `hand_detection/run.bat`.
+
+### Gestos estáveis
+
+Os gestos são classificados a partir dos **21 landmarks** da mão e estabilizados com:
+
+- exigência de múltiplos frames consecutivos,
+- cooldown para reduzir repetições acidentais,
+- limiares menores para a pinça/“A‑OK” melhorar responsividade na loja.
+
+### Interface da loja
+
+Telas: `MENU`, `NOVIDADES`, `CARRINHO`, `NOTICIAS`, `REGISTRAR`.
+
+Produtos têm ids estáveis para permitir hit-test e manipulação do carrinho em memória.
+
+### Rastreamento do olhar (íris)
+
+- Landmarks da íris (468–477) + contorno do olho.
+- Remapeamento com sensibilidade assimétrica (ganho diferente para “olhar para cima” vs “olhar para baixo”).
+- Suavização do gaze para reduzir jitter.
+
+### Rosto: qualidade e registro
+
+Antes de registrar:
+
+- checagem de nitidez (Laplaciano),
+- brilho médio,
+- área mínima,
+- rosto centrado.
+
+O nome é capturado via Tkinter.
+
+### Encerramento automático e assistente
+
+Ao faltar rosto por `NO_FACE_EXIT_S`:
+
+- grava `hand_detection/last_session_summary.json`,
+- inicia `cap_assistant`,
+- e envia o resultado para o painel do celular.
+
+---
+
+## Resumo de tecnologia
+
+Visão geral das tecnologias usadas no projeto, por categoria.
+
+### Linguagem e runtime
+
+- **Python 3** — aplicações (`hand_detection`, `cap_assistant`, `mobile_relay`).
+- **JavaScript (vanilla)** — front-end estático do assistente (`cap_assistant/frontend`: HTML/CSS/JS).
+- **HTML/CSS** — página do painel do celular (`mobile_relay`).
+
+### Aplicação desktop (câmera + loja)
+
+- **OpenCV (`opencv-python`)** — captura de vídeo, janelas, desenho e loop.
+- **MediaPipe Tasks API** — `HandLandmarker` (mãos/gestos) e `FaceLandmarker` (rosto/blendshapes/íris).
+- **Pillow (PIL)** — renderização da interface da loja.
+- **Tkinter** — entrada de nome durante o registro do rosto.
+- **NumPy** — apoio numérico para landmarks e métricas.
+
+### Assistente pós-sessão (`cap_assistant`)
+
+- **FastAPI** — API REST (ex.: `/health`, `/chat`, `/session_summary`).
+- **Uvicorn** — servidor ASGI.
+- **Pydantic** — modelos de request/response.
+- **python-dotenv** — carregamento de `.env`.
+- **WebSockets** — hub/broadcast para o front-end do assistente.
+- **pywebview** — janela no Windows para abrir a UI sem depender do Chrome (fallback para navegador).
+- **httpx** — POST assíncrono do texto final para o `mobile_relay`.
+
+### IA e dados
+
+- **OpenAI API** (`openai` SDK) — geração de respostas (modo demo se chave não estiver presente).
+- **Groq** (opcional) — alternativa para o serviço LLM.
+- **Pandas** — manipulação de dados onde aplicável.
+- **Busca web opcional**: `requests`, **BeautifulSoup4**, `lxml` (quando habilitada).
+
+### Painel no celular (sem Expo)
+
+- **`mobile_relay`** — FastAPI + página HTML (porta **8000**):
+  - `GET /` (HTML),
+  - `GET /text` (último texto),
+  - `POST /send` (atualiza o texto).
+- Celular usa **navegador** para abrir o endereço na LAN.
+- O assistente envia o texto final para o relay; a página atualiza por polling.
+
+### Observações de escopo
+
+- **Expo / React Native** foram abandonados por complexidade e instabilidade no hackathon.
+- A solução móvel atual é **HTTP + navegador** (mais estável em demo).
+
+---
+
+## Licença e créditos
+
+Este projeto e seu prompt mestre foram elaborados pelo time; o README é adaptado para o hackathon **Cap Vivo 2026**.
+
 # Cap Vivo 2026 — Guia de projeto com IA
 
 Este repositório documenta **como vamos conduzir o projeto de software no hackathon**: papel da IA, disciplina técnica, escopo e um **prompt mestre** reutilizável (Cursor, ChatGPT, etc.).
@@ -370,7 +663,7 @@ O **polegar para cima** só conta quando é claramente “para cima” na imagem
 
 ### Assistente pós-sessão (`cap_assistant/`)
 
-- Baseado no projeto em **`IAtemporaria/temp_processo_seletivo_cap`**, numa pasta **nova** (`cap_assistant/`): não alteramos o código dentro de `IAtemporaria` — copiamos **frontend** + lógica **FastAPI/RAG** para `cap_assistant/`.
+- Baseado em um projeto de referência: a lógica **frontend** + **FastAPI/RAG** foi copiada para uma pasta **nova** (`cap_assistant/`). (A pasta de referência não é necessária para rodar esta versão.)
 - **Arranque alinhado ao README da IA**: um servidor **Uvicorn** e uso do **navegador** na mesma porta (antes, Streamlit + API com logs ocultos fazia o CMD parecer “vazio” se algo falhasse).
 - **Omitido** a pedido: foco em não depender de exportar conversa / painéis extra; o HTML de referência ainda pode ter botões antigos — podem ser limpos depois.
 - **LLM** opcional (`OPENAI_API_KEY` ou `GROQ_API_KEY` no `.env` de `cap_assistant`); sem chaves, **modo demonstração**. **Busca web** desligada por predefinição (`WEB_SEARCH_ENABLED=false`).
@@ -385,8 +678,8 @@ O **polegar para cima** só conta quando é claramente “para cima” na imagem
 | `hand_detection/eye_tracker.py` | Gaze a partir da íris e mapeamento para a janela da loja |
 | `hand_detection/face_registry.py` | Registro e reconhecimento por landmarks |
 | `hand_detection/session_export.py` | Escrita de `last_session_summary.json` |
-| `cap_assistant/run_cap_assistant.py` | Arranque API + Streamlit após saída por ausência de rosto |
-| `cap_assistant/app/` | API, RAG, LLM e `streamlit_app.py` |
+| `cap_assistant/run_cap_assistant.py` | Arranque da API + UI web após saída por ausência de rosto |
+| `cap_assistant/app/` | API FastAPI, LLM, WebSocket; opcional `streamlit_app.py` (não é o fluxo padrão) |
 
 ---
 

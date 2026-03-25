@@ -14,13 +14,13 @@
     --text-primary: #ffffff;
     --text-secondary: #b0b0b0;
     --text-muted: #808080;
-    --accent-primary: #1e3a8a; /* Azul marinho */
-    --accent-secondary: #1e40af;
-    --accent-hover: #1d4ed8;
-    --on-accent: #ffffff;
+    --accent-primary: #f5f5f5;
+    --accent-secondary: #e8e8e8;
+    --accent-hover: #dedede;
+    --on-accent: #1a1a1a;
     --border-color: #404040;
     --shadow: rgba(0, 0, 0, 0.3);
-    --message-user-bg: #1e3a8a;
+    --message-user-bg: #ececec;
     --message-ai-bg: #2d2d2d;
     --input-bg: #3a3a3a;
     --sidebar-bg: #1a1a1a;
@@ -34,16 +34,16 @@
     --text-primary: #1a1a1a;
     --text-secondary: #495057;
     --text-muted: #6c757d;
-    --accent-primary: #0070AD;
-    --accent-secondary: #005a8d;
-    --accent-hover: #004B7F;
-    --on-accent: #ffffff;
+    --accent-primary: #f5f5f5;
+    --accent-secondary: #e8e8e8;
+    --accent-hover: #dedede;
+    --on-accent: #1a1a1a;
     --border-color: #dee2e6;
     --shadow: rgba(0, 0, 0, 0.1);
-    --message-user-bg: #0070AD;
+    --message-user-bg: #ececec;
     --message-ai-bg: #f8f9fa;
     --input-bg: #ffffff;
-    --sidebar-bg: #004B7F;
+    --sidebar-bg: #e9ecef;
 }
 
 /* Tema Verde */
@@ -134,7 +134,7 @@ body {
     width: 100%;
     padding: 0.75rem 1rem;
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--on-accent);
     border: none;
     border-radius: 0.5rem;
     font-size: 0.9rem;
@@ -189,7 +189,7 @@ body {
 
 .chat-item.active {
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--on-accent);
 }
 
 .chat-item-title {
@@ -208,7 +208,7 @@ body {
 }
 
 .chat-item.active .chat-item-date {
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(26, 26, 26, 0.65);
 }
 
 .chat-item-actions {
@@ -276,7 +276,7 @@ body {
 /* Header do Chat */
 .chat-header {
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--on-accent);
     padding: 1rem 1.5rem;
     display: flex;
     justify-content: space-between;
@@ -319,7 +319,7 @@ body {
     left: 1rem;
     z-index: 1000;
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--on-accent);
     border: none;
     border-radius: 50%;
     width: 48px;
@@ -400,7 +400,7 @@ body {
 .settings-btn {
     background: none;
     border: none;
-    color: white;
+    color: var(--on-accent);
     cursor: pointer;
     padding: 0.5rem;
     border-radius: 0.5rem;
@@ -513,7 +513,7 @@ body {
 .theme-option.active {
     border-color: var(--accent-primary);
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--on-accent);
 }
 
 .theme-preview {
@@ -566,12 +566,12 @@ body {
 
 .message-container.user .message-avatar {
     background-color: var(--message-user-bg);
-    color: white;
+    color: var(--on-accent);
 }
 
 .message-container.ai .message-avatar {
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--on-accent);
     overflow: hidden;
 }
 
@@ -596,14 +596,14 @@ body {
     font-weight: 600;
     font-size: 0.9rem;
     margin-bottom: 0.5rem;
-    color: var(--accent-primary);
+    color: #d4d4d4;
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 0.25rem;
 }
 
 .message-container.user .message-bubble {
     background-color: var(--message-user-bg);
-    color: white;
+    color: var(--on-accent);
     border-bottom-right-radius: 0.25rem;
 }
 
@@ -619,7 +619,7 @@ body {
 }
 
 .message-bubble strong {
-    color: var(--accent-primary);
+    color: #e5e5e5;
 }
 
 .message-bubble ul {
@@ -663,7 +663,7 @@ body {
 
 .send-button {
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--on-accent);
     border: none;
     border-radius: 50%;
     width: 44px;
@@ -875,7 +875,7 @@ body {
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 0.8rem;
-    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    background: linear-gradient(135deg, #ffffff, #c8c8c8);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -942,7 +942,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(135deg, rgba(30, 58, 138, 0.1), rgba(30, 64, 175, 0.1));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
     opacity: 0;
     transition: opacity 0.3s ease;
 }

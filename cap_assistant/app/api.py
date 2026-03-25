@@ -203,5 +203,5 @@ else:
             "name": "Assistente Cap Vivo",
             "version": "1.1.0",
             "docs": "/docs",
-            "note": "Coloque a pasta frontend/ ao lado de app/ (copie de IAtemporaria/temp_processo_seletivo_cap/frontend).",
+            "note": "Coloque a pasta `frontend/` ao lado de `app/` (conteúdo `index.html`, `style.css`, `script.js` e assets).",
         }
