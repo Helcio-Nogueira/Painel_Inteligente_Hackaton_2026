@@ -306,6 +306,152 @@ Depois anexe o texto preenchido das seções **2.1 a 2.6** deste README.
 
 ---
 
+## Histórico de implementação — demo interativa (`hand_detection`)
+
+Esta seção descreve, de forma contínua, o que foi construído e afinado na aplicação principal sob `hand_detection/`, além do assistente pós-sessão. Serve como memória de produto para o hackathon **Cap Vivo 2026** e para quem for continuar o código.
+
+### Visão geral
+
+A demo é uma **loja interativa em duas janelas**: (1) pré-visualização da **câmera** com desenho das mãos, rosto e íris; (2) **interface da loja** renderizada com **Pillow** (`store_ui.py`), com navegação por **gestos** da mão (MediaPipe Hands) e, em algumas telas, interação por **olhar** aproximado (íris no espaço do olho).
+
+### Stack e arranque
+
+- **Python**, **OpenCV** (captura e janelas), **MediaPipe** (tasks API: `HandLandmarker` em modo vídeo, `FaceLandmarker` com blendshapes quando disponível), **Pillow**, **NumPy**.
+- Modelos `.task` são descarregados automaticamente para `%LOCALAPPDATA%\CapVivo2026\mediapipe_models\` no Windows (ou `hand_detection/models/` em outros casos), via `urllib.request.urlretrieve`.
+- Execução típica: `hand_detection/run.bat` ou `python main.py` dentro do ambiente virtual (ver `hand_detection/requirements.txt`).
+
+### Gestos estáveis (`gestures.py` + `StableGesture` em `main.py`)
+
+Os gestos são classificados a partir dos **21 landmarks** da mão (selfie espelhada). Um filtro temporal exige **vários frames consecutivos** iguais antes de “disparar” o gesto, com **cooldown** para evitar repetições acidentais; a **pinça / 👌** (`PINCH_OK`) usa limiares mais curtos para parecer responsiva na loja.
+
+| Gesto | Efeito na navegação |
+|--------|---------------------|
+| Polegar para cima (`THUMB_UP`) | Abre **Novidades** |
+| Paz / V (`PEACE`) | Abre **Carrinho** |
+| Palma aberta (`OPEN_PALM`) | Abre **Notícias** |
+| Punho (`FIST`) | **Volta ao menu** (nas telas internas) |
+| Indicador estendido (`INDEX_POINT`) | Entra no fluxo **Registrar rosto** |
+| A-OK / pinça (`PINCH_OK`) | Em **Novidades**, com olhar num produto, **adiciona ao carrinho**; em **Carrinho**, remove a linha sob o olhar |
+
+O **polegar para cima** só conta quando é claramente “para cima” na imagem (`thumb_is_true_thumbs_up`), para não confundir com o punho.
+
+### Interface da loja (`store_ui.py`)
+
+- **Telas**: `MENU`, `NOVIDADES`, `CARRINHO`, `NOTICIAS`, `REGISTRAR`.
+- Lista de produtos em Novidades com **ids estáveis** (`aura`, `fitneo`, etc.) para o carrinho em memória.
+- **Hit-test do olhar** com margens e fallback por faixa vertical (`resolve_novidades_hover`, `resolve_carrinho_hover`), porque o gaze é impreciso.
+
+### Rastreamento do olhar (`eye_tracker.py`)
+
+- Usa landmarks de **íris** (468–477) e contorno do olho para obter posição da íris **normalizada dentro da caixa do olho**, reduzindo um pouco o efeito da cabeça.
+- **`smooth_gaze`**: média exponencial para estabilizar o ponto.
+- **`gaze_to_screen`**: remapeamento com sensibilidade assimétrica (olhar “para cima” na tela vs “para baixo”), curva com expoente `_POWER`, centro de **neutro da íris** (`NEUTRAL_GY`) mapeado para o **meio vertical** da janela da loja (`_SCREEN_CY`), e **inversão final** `y = (1 - cy) * height` para alinhar com o comportamento real da câmera; ramo de ganho vertical ajustado em função de `gy` relativamente ao neutro.
+
+### Rosto: registo, reconhecimento e qualidade (`face_registry.py` + `main.py`)
+
+- **Encoding** a partir dos **468 pontos** do face mesh: normalização por olhos, eixos alinhados, subset de keypoints e razões geométricas; comparação por **distância de cosseno**.
+- **`register_face_multiple_encodings`**: várias amostras por pessoa para reconhecimento mais robusto.
+- **`clear_registry()`** ao **início** de cada execução (sessão limpa em memória).
+- Na tela **Registrar**: contagem decrescente com requisitos de **qualidade** (`check_face_quality`): nitidez (Laplaciano), brilho médio, área mínima da face, rosto **centrado** no quadro; feedback textual em tempo real; ao concluir, diálogo **Tkinter** para o nome.
+
+### Humor e “profundidade” (aproximação à câmera)
+
+- Com **blendshapes** do Face Landmarker: `_estimate_mood_from_blendshapes` (sorriso, sobrolho, olhar para baixo, etc.).
+- **Fallback** por landmarks: `_estimate_mood` (inclui heurística de “distraído no celular” pela posição relativa íris vs olho).
+- Acumulam-se **segundos por categoria** de humor e por **faixa de distância** derivada da **distância interocular** no frame (`_depth_category`), atualizados com `dt` do loop quando há rosto.
+
+### Encerramento automático e assistente de dados
+
+- Se o **modelo facial** estiver ativo e **não houver rosto** detectado durante **`NO_FACE_EXIT_S`** (predefinição 5 s), o loop termina com mensagem no stderr.
+- Nesse caso é escrito **`hand_detection/last_session_summary.json`** com: motivo de fim, rótulo do usuário (nome reconhecido ou visitante), **ids do carrinho**, tempos acumulados por humor e por distância, última tela e data/hora UTC.
+- **Depois** da libertação da câmera e fecho das janelas OpenCV, é lançado **`cap_assistant/run_cap_assistant.py`** (nova consola no Windows): sobe **FastAPI** na porta **8765** e abre uma **janela no computador** (**pywebview** / WebView2) com o mesmo HTML do assistente — sem precisar do Chrome. Com `CAPVIVO_ASSISTANT_BROWSER=1` usa o navegador. **Exceto** se `CAPVIVO_SKIP_DATA_ASSISTANT=1`. As dependências do assistente estão em **`hand_detection/requirements.txt`** (inclui `uvicorn`, `fastapi`, `pywebview`, etc.).
+- **Sair com Q/ESC** enquanto ainda há rosto **não** abre o assistente (apenas a saída por ausência prolongada de rosto).
+- **Nota:** se o Face Landmarker **falhar ao carregar**, o temporizador de ausência de rosto **não corre**; o assistente automático não é disparado por esse caminho.
+
+### Assistente pós-sessão (`cap_assistant/`)
+
+- Baseado no projeto em **`IAtemporaria/temp_processo_seletivo_cap`**, numa pasta **nova** (`cap_assistant/`): não alteramos o código dentro de `IAtemporaria` — copiamos **frontend** + lógica **FastAPI/RAG** para `cap_assistant/`.
+- **Arranque alinhado ao README da IA**: um servidor **Uvicorn** e uso do **navegador** na mesma porta (antes, Streamlit + API com logs ocultos fazia o CMD parecer “vazio” se algo falhasse).
+- **Omitido** a pedido: foco em não depender de exportar conversa / painéis extra; o HTML de referência ainda pode ter botões antigos — podem ser limpos depois.
+- **LLM** opcional (`OPENAI_API_KEY` ou `GROQ_API_KEY` no `.env` de `cap_assistant`); sem chaves, **modo demonstração**. **Busca web** desligada por predefinição (`WEB_SEARCH_ENABLED=false`).
+
+### Arquivos relevantes (mapa rápido)
+
+| Arquivo | Papel |
+|----------|--------|
+| `hand_detection/main.py` | Loop principal, gestos, rosto, humor, exportação e arranque do assistente |
+| `hand_detection/gestures.py` | Classificação de gestos |
+| `hand_detection/store_ui.py` | Layout e lógica visual da loja |
+| `hand_detection/eye_tracker.py` | Gaze a partir da íris e mapeamento para a janela da loja |
+| `hand_detection/face_registry.py` | Registro e reconhecimento por landmarks |
+| `hand_detection/session_export.py` | Escrita de `last_session_summary.json` |
+| `cap_assistant/run_cap_assistant.py` | Arranque API + Streamlit após saída por ausência de rosto |
+| `cap_assistant/app/` | API, RAG, LLM e `streamlit_app.py` |
+
+---
+
 ## Licença e créditos
 
 Prompt mestre elaborado pelo time / por você; README com adaptações para o hackathon **Cap Vivo 2026**.
+
+---
+
+## Resumo de tecnologia
+
+Visão geral das tecnologias usadas no projeto, por categoria.
+
+### Linguagem e runtime
+
+- **Python 3** — aplicação principal (`hand_detection`, `cap_assistant`, `mobile_relay`).
+- **JavaScript (vanilla)** — interface web do assistente (`cap_assistant/frontend`: HTML/CSS/JS).
+- **HTML/CSS** — página do “painel mobile” servida pelo relay (`mobile_relay/`).
+
+### Aplicação desktop (loja + câmera)
+
+- **OpenCV (`opencv-python`)** — captura de vídeo, janelas, desenho na câmera, flip, métricas de qualidade de frame.
+- **MediaPipe (Tasks API)** — `HandLandmarker` (gestos), `FaceLandmarker` (rosto, blendshapes, íris para gaze).
+- **Pillow (PIL)** — renderização da interface da loja em imagem.
+- **Tkinter** — diálogo para nome no registro de rosto.
+- **NumPy** — arrays e operações numéricas (dependência típica de OpenCV/MediaPipe).
+
+### Assistente pós-sessão (`cap_assistant`)
+
+- **FastAPI** — API REST (`/health`, `/chat`, `/session_summary`, etc.).
+- **Uvicorn** — servidor ASGI (com extras `standard`: `watchfiles`, `httptools`, etc.).
+- **Starlette** (via FastAPI) — base do framework web.
+- **Pydantic** — modelos de request/response e validação.
+- **python-dotenv** — carregamento de variáveis de ambiente (`.env`).
+- **httpx** — cliente HTTP assíncrono (ex.: envio do texto da IA para o relay no celular).
+- **WebSockets** — endpoint `/ws` e hub de broadcast para clientes conectados.
+- **pywebview** — janela nativa no Windows (WebView2) com o HTML do assistente; fallback para navegador.
+- **Frontend estático** — `index.html`, `style.css`, `script.js` (chat, auto-prompt com dados da sessão).
+
+### Inteligência artificial e dados
+
+- **OpenAI API** (`openai` SDK) — geração de respostas quando configurada (`OPENAI_API_KEY`, modelo configurável).
+- **Groq** — opcional no serviço de LLM quando `GROQ_API_KEY` está definida (mesmo fluxo de chat).
+- **Modo demonstração** — respostas locais quando não há chaves de API.
+- **Pandas** — manipulação de dados onde aplicável (ex.: contexto de datasets / utilitários).
+- **Busca web (opcional)** — `requests`, **BeautifulSoup4**, **lxml** — apenas se `WEB_SEARCH_ENABLED` estiver ativo.
+
+### Painel no celular (rede local)
+
+- **`mobile_relay`** — mini app **FastAPI** + **Uvicorn** na porta **8000** (padrão), exposto em `0.0.0.0`.
+- **Navegador no Android (Chrome ou similar)** — acesso por **HTTP** ao IP da máquina na LAN (sem app nativo; fluxo tipo PWA leve).
+- **Comunicação** — o assistente envia o texto final via **POST** para o relay (`CAPVIVO_MOBILE_RELAY_URL`); a página faz **polling** em `/text`.
+
+### Sistema operacional e ambiente
+
+- **Windows 10/11** — desenvolvimento e execução principais.
+- **PowerShell / CMD** — terminal; scripts `.bat` para `run.bat` e arranque.
+- **Rede** — Wi‑Fi local (IPv4); possível necessidade de regra no **Firewall do Windows** para portas 8000 / 8765.
+
+### Ferramentas e formato de dados
+
+- **JSON** — `last_session_summary.json`, payloads de API e sessão.
+- **CSV** — dados de exemplo em `cap_assistant/data/` (quando usados).
+- **Git** — controlo de versões do repositório.
+
+### O que não faz parte do stack atual
+
+- **Expo / React Native** — removido do fluxo; o celular usa apenas o navegador + relay local.

@@ -1,0 +1,14 @@
+<svg width="140" height="40" viewBox="0 0 140 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Capgemini Text -->
+  <text x="5" y="26" font-family="Arial, sans-serif" font-size="16" fill="#0070AD" font-weight="400" style="font-style: italic;">Capgemini</text>
+  
+  <!-- Capgemini Icon - Spade symbol -->
+  <g transform="translate(110, 8)">
+    <!-- Main spade shape -->
+    <path d="M0 0C-2 0 -4 2 -4 4C-4 6 -2 8 0 10C2 8 4 6 4 4C4 2 2 0 0 0Z" fill="#0070AD"/>
+    <!-- Stem -->
+    <rect x="-1" y="10" width="2" height="8" fill="#0070AD"/>
+    <!-- Accent wave -->
+    <path d="M-2 12C-1 10 1 10 2 12C3 14 2 16 0 18C-2 16 -3 14 -2 12Z" fill="#00AFFF"/>
+  </g>
+</svg>

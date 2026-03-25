@@ -1,0 +1,11 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Capgemini Icon - Spade symbol -->
+  <g transform="translate(12, 6)">
+    <!-- Main spade shape -->
+    <path d="M0 0C-1.5 0 -3 1.5 -3 3C-3 4.5 -1.5 6 0 7.5C1.5 6 3 4.5 3 3C3 1.5 1.5 0 0 0Z" fill="#0070AD"/>
+    <!-- Stem -->
+    <rect x="-0.75" y="7.5" width="1.5" height="6" fill="#0070AD"/>
+    <!-- Accent wave -->
+    <path d="M-1.5 9C-0.75 7.5 0.75 7.5 1.5 9C2.25 10.5 1.5 12 0 13.5C-1.5 12 -2.25 10.5 -1.5 9Z" fill="#00AFFF"/>
+  </g>
+</svg>

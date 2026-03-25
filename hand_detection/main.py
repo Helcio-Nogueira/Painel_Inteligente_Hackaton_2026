@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import urllib.error
 from pathlib import Path
 
 import cv2
@@ -71,6 +72,9 @@ STORE_W, STORE_H = 540, 820
 
 # Encerra o programa se não houver rosto (com modelo facial carregado) por este tempo.
 NO_FACE_EXIT_S = 5.0
+
+# Site do celular (relay) — sobe junto com câmera/loja
+MOBILE_RELAY_PORT = int(os.environ.get("CAPVIVO_MOBILE_PORT", "8000"))
 
 # Qualidade de frame (valores relaxados para garantir captura)
 SHARPNESS_THRESHOLD = 25
@@ -441,6 +445,7 @@ def _launch_data_assistant() -> None:
     env = os.environ.copy()
     env["CAPVIVO_SESSION_JSON"] = str(session_json)
     env.setdefault("CAP_ASSISTANT_API", "http://127.0.0.1:8765")
+    env.setdefault("CAPVIVO_MOBILE_RELAY_URL", f"http://127.0.0.1:{MOBILE_RELAY_PORT}")
     try:
         creationflags = subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
         subprocess.Popen(
@@ -453,7 +458,53 @@ def _launch_data_assistant() -> None:
         print(f"Nao foi possivel iniciar o assistente: {e}", file=sys.stderr)
 
 
+def _wait_url_ok(url: str, timeout_s: float = 8.0) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=1.5) as r:
+                if 200 <= getattr(r, "status", 200) < 500:
+                    return True
+        except (urllib.error.URLError, TimeoutError, OSError):
+            time.sleep(0.25)
+    return False
+
+
+def _launch_mobile_relay() -> subprocess.Popen | None:
+    """Sobe o site do celular (sem IA) em background."""
+    project_root = Path(__file__).resolve().parent.parent
+    app_mod = "mobile_relay.app:app"
+    cmd = [
+        sys.executable,
+        "-m",
+        "uvicorn",
+        app_mod,
+        "--host",
+        "0.0.0.0",
+        "--port",
+        str(MOBILE_RELAY_PORT),
+    ]
+    try:
+        creationflags = subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(project_root),
+            env=os.environ.copy(),
+            creationflags=creationflags,
+        )
+    except Exception as e:
+        print(f"[AVISO] Nao foi possivel iniciar site do celular: {e}", file=sys.stderr)
+        return None
+
+    if _wait_url_ok(f"http://127.0.0.1:{MOBILE_RELAY_PORT}/health", timeout_s=10.0):
+        print(f"Site do celular pronto: http://SEU_IP:{MOBILE_RELAY_PORT}/")
+    else:
+        print("[AVISO] Site do celular nao respondeu a tempo.", file=sys.stderr)
+    return proc
+
+
 def main() -> int:
+    mobile_proc = _launch_mobile_relay()
     hand_model = _model_path("hand_landmarker.task")
     _ensure_model(hand_model, MODEL_URL)
 
@@ -492,12 +543,15 @@ def main() -> int:
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     if not cap.isOpened():
         print("Não foi possível abrir a câmera (índice 0).", file=sys.stderr)
+        if mobile_proc and mobile_proc.poll() is None:
+            mobile_proc.terminate()
         return 1
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     print("Duas janelas: câmera + loja. Q ou ESC na câmera para sair.")
+    print(f"Abra no celular: http://SEU_IP:{MOBILE_RELAY_PORT}/  (mesma Wi-Fi)")
 
     clear_registry()
 
@@ -1010,6 +1064,14 @@ def main() -> int:
             if face_landmarker_ctx is not None and hasattr(face_landmarker_ctx, "close"):
                 face_landmarker_ctx.close()
             cv2.destroyAllWindows()
+            # Se o programa encerrou por "sem rosto", mantemos o relay rodando
+            # para o celular continuar aberto e receber o texto da IA.
+            if not exit_due_to_no_face:
+                if mobile_proc and mobile_proc.poll() is None:
+                    try:
+                        mobile_proc.terminate()
+                    except Exception:
+                        pass
 
     if exit_due_to_no_face:
         _launch_data_assistant()

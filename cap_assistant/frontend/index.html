@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assistente de Análise de Dados</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="capgemini-icon.png.png" type="image/png">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+                <div class="sidebar-header">
+                    <div class="logo">
+                        <img src="capgemini-icon.png.png" alt="Assistente" class="capgemini-logo">
+                    </div>
+                </div>
+            
+            <button class="new-chat-btn" onclick="startNewChat()">
+                + Nova Conversa
+            </button>
+
+            <!-- Upload de CSV removido por enquanto: a base será enviada por chat -->
+            
+            <!-- Histórico de Conversas -->
+            <div class="chat-history">
+                <h3 class="history-title">Clientes anteriores</h3>
+                <div id="chat-list" class="chat-list">
+                    <!-- Lista de conversas será inserida aqui dinamicamente -->
+                </div>
+            </div>
+            
+            <div class="sidebar-footer">
+                <button class="sidebar-button" onclick="downloadChat()" style="display:none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                    </svg>
+                    <span>Download Conversa</span>
+                </button>
+                <button class="sidebar-button" onclick="confirmClearAllChats()" style="display:none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1 1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                    </svg>
+                    <span>Limpar Todos os Chats</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat Main Area -->
+        <div class="chat-main">
+            <div class="chat-header">
+                <div class="header-left">
+                    <button class="sidebar-toggle" onclick="toggleSidebar()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/>
+                        </svg>
+                    </button>
+                    <img src="capgemini-icon.png.png" alt="Assistente" class="capgemini-icon-header">
+                    <div class="header-text">
+                        <h1>Assistente</h1>
+                        <p>Análise de dados a partir de uma base enviada pelo cliente.</p>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <button class="settings-btn" onclick="openSettings()" style="display:none;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+                            <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.292-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.292c.415.764-.42 1.6-1.185 1.184l-.292-.159a1.873 1.873 0 0 0-2.692 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.693-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.292A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/>
+                        </svg>
+                        <span>Configurações</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chat-messages">
+                <!-- Mensagens do chat serão inseridas aqui -->
+            </div>
+            
+            <!-- Tela de Boas-vindas - Como primeira mensagem -->
+            <div id="welcome-message" style="display: none;">
+                <div class="message-container assistant">
+                    <div class="message-avatar">
+                        <img src="capgemini-icon.png.png" alt="Assistente" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%; display: block;">
+                    </div>
+                    <div class="message-bubble">
+                        <div class="capbot-header">Assistente</div>
+                        <div style="text-align: center; padding: 2rem; max-width: 600px; margin: 0 auto;">
+                            <h2 style="font-size: 1.8rem; margin-bottom: 0.8rem; color: var(--text-primary);">Bem-vindo</h2>
+                            <p style="font-size: 1.1rem; margin-bottom: 1.5rem; color: var(--text-secondary);">Envie um CSV e peça análise de padrões e insights.</p>
+                            
+                            <h4 style="margin-bottom: 1.2rem; color: var(--text-primary);">Comece com uma dessas perguntas:</h4>
+                            
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; justify-items: center;">
+                                <div onclick="sendSuggestion('Quais colunas têm mais valores ausentes e como isso impacta a análise?')" style="
+                                    background: var(--bg-tertiary);
+                                    border: 1px solid var(--border-color);
+                                    border-radius: 10px;
+                                    padding: 1.2rem;
+                                    cursor: pointer;
+                                    transition: all 0.3s ease;
+                                    width: 100%;
+                                    max-width: 200px;
+                                " onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='translateY(0)'">
+                                    <div style="font-size: 1.8rem; margin-bottom: 0.6rem;">🧼</div>
+                                    <h5 style="margin-bottom: 0.4rem; color: var(--accent-primary); font-size: 0.95rem;">Qualidade</h5>
+                                    <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.3;">Valores ausentes e impacto</p>
+                                </div>
+                                
+                                <div onclick="sendSuggestion('Identifique outliers nas colunas numéricas e possíveis causas.')" style="
+                                    background: var(--bg-tertiary);
+                                    border: 1px solid var(--border-color);
+                                    border-radius: 10px;
+                                    padding: 1.2rem;
+                                    cursor: pointer;
+                                    transition: all 0.3s ease;
+                                    width: 100%;
+                                    max-width: 200px;
+                                " onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='translateY(0)'">
+                                    <div style="font-size: 1.8rem; margin-bottom: 0.6rem;">📌</div>
+                                    <h5 style="margin-bottom: 0.4rem; color: var(--accent-primary); font-size: 0.95rem;">Outliers</h5>
+                                    <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.3;">Pontos fora do padrão</p>
+                                </div>
+                                
+                                <div onclick="sendSuggestion('Quais variáveis parecem mais relacionadas entre si?')" style="
+                                    background: var(--bg-tertiary);
+                                    border: 1px solid var(--border-color);
+                                    border-radius: 10px;
+                                    padding: 1.2rem;
+                                    cursor: pointer;
+                                    transition: all 0.3s ease;
+                                    width: 100%;
+                                    max-width: 200px;
+                                " onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='translateY(0)'">
+                                    <div style="font-size: 1.8rem; margin-bottom: 0.6rem;">🔗</div>
+                                    <h5 style="margin-bottom: 0.4rem; color: var(--accent-primary); font-size: 0.95rem;">Relações</h5>
+                                    <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.3;">Variáveis relacionadas</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="chat-input-area">
+                <input type="text" id="user-input" placeholder="Envie uma mensagem..." onkeydown="handleKeyDown(event)">
+                <button id="send-button" onclick="sendMessage()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M15.964.686a.5.5 0 0 0-.65-.65L.767 5.855H.766l-.452.18a.5.5 0 0 0-.082.887l.41.26.001.002 4.995 3.178 1.59 1.671L10.82 16h.002l.212-.124a.5.5 0 0 0 .096-.702l-.419-1.11-.002-.002-3.178-4.995L15.964.686Z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Configurações -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">Configurações</h2>
+                <button class="close-btn" onclick="closeSettings()">&times;</button>
+            </div>
+            
+            <div class="theme-section">
+                <h3>Tema</h3>
+                <div class="theme-options">
+                    <div class="theme-option active" data-theme="dark" onclick="selectTheme('dark')">
+                        <div class="theme-preview" style="background: linear-gradient(135deg, #212121 0%, #2d2d2d 100%); color: white;">
+                            🌙 Escuro
+                        </div>
+                        <div class="theme-name">Escuro</div>
+                    </div>
+                    
+                    <div class="theme-option" data-theme="light" onclick="selectTheme('light')">
+                        <div class="theme-preview" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); color: #1a1a1a;">
+                            ☀️ Claro
+                        </div>
+                        <div class="theme-name">Claro</div>
+                    </div>
+                    
+                    <div class="theme-option" data-theme="green" onclick="selectTheme('green')">
+                        <div class="theme-preview" style="background: linear-gradient(135deg, #1a2e1a 0%, #2d4a2d 100%); color: white;">
+                            🌿 Verde
+                        </div>
+                        <div class="theme-name">Verde</div>
+                    </div>
+                    
+                    <div class="theme-option" data-theme="red" onclick="selectTheme('red')">
+                        <div class="theme-preview" style="background: linear-gradient(135deg, #2e1a1a 0%, #4a2d2d 100%); color: white;">
+                            🔴 Vermelho
+                        </div>
+                        <div class="theme-name">Vermelho</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
+    
+    <!-- Botão flutuante para expandir sidebar quando colapsada -->
+    <button class="sidebar-expand-btn" onclick="toggleSidebar()" id="sidebar-expand-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+            <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/>
+        </svg>
+    </button>
+
+    <script src="script.js"></script>
+</body>
+</html>
