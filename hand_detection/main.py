@@ -10,12 +10,14 @@ Gestos (mão bem visível, ~0,4 s estáveis):
 
 Uso: .venv\\Scripts\\python.exe main.py   ou   run.bat
 Q / ESC na janela da câmera: sair.
-Sem rosto na câmera por ~5 s (com modelo facial ativo): encerra sozinho.
+Sem rosto na câmera por ~5 s (com modelo facial ativo): encerra sozinho e abre o assistente
+cap_assistant (API + Streamlit), salvo CAPVIVO_SKIP_DATA_ASSISTANT=1.
 """
 
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import time
 import urllib.request
@@ -30,6 +32,7 @@ import tkinter as tk
 from tkinter import simpledialog
 
 from face_registry import clear_registry, encode_face, recognize_face, register_face_multiple_encodings
+from session_export import write_session_summary
 from gestures import Gesture, classify_from_result
 from store_ui import (
     Screen,
@@ -424,6 +427,32 @@ def _screen_title(s: Screen) -> str:
     }[s]
 
 
+def _launch_data_assistant() -> None:
+    """Abre API + interface Streamlit (cap_assistant) numa nova consola no Windows."""
+    skip = os.environ.get("CAPVIVO_SKIP_DATA_ASSISTANT", "").strip().lower()
+    if skip in ("1", "true", "yes", "on"):
+        return
+    project_root = Path(__file__).resolve().parent.parent
+    launcher = project_root / "cap_assistant" / "run_cap_assistant.py"
+    if not launcher.is_file():
+        print("Assistente: run_cap_assistant.py nao encontrado.", file=sys.stderr)
+        return
+    session_json = Path(__file__).resolve().parent / "last_session_summary.json"
+    env = os.environ.copy()
+    env["CAPVIVO_SESSION_JSON"] = str(session_json)
+    env.setdefault("CAP_ASSISTANT_API", "http://127.0.0.1:8765")
+    try:
+        creationflags = subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
+        subprocess.Popen(
+            [sys.executable, str(launcher)],
+            cwd=str(project_root / "cap_assistant"),
+            env=env,
+            creationflags=creationflags,
+        )
+    except Exception as e:
+        print(f"Nao foi possivel iniciar o assistente: {e}", file=sys.stderr)
+
+
 def main() -> int:
     hand_model = _model_path("hand_landmarker.task")
     _ensure_model(hand_model, MODEL_URL)
@@ -503,12 +532,16 @@ def main() -> int:
     depth_key_curr: str | None = None
     depth_label_curr: str = ""
     cart_product_ids: list[str] = []
+    screen_seconds = {s.name: 0.0 for s in Screen}
+    look_product_seconds: dict[str, float] = {}
+    look_cart_item_seconds: dict[str, float] = {}
     last_loop_t = time.perf_counter()
     novidades_hover_sticky_id: str | None = None
     novidades_hover_sticky_until: float = 0.0
     carrinho_hover_sticky_id: str | None = None
     carrinho_hover_sticky_until: float = 0.0
     no_face_accum_s = 0.0
+    exit_due_to_no_face = False
 
     with HandLandmarker.create_from_options(hand_options) as landmarker:
         try:
@@ -556,6 +589,18 @@ def main() -> int:
                                 f"{NO_FACE_EXIT_S:.0f} s.",
                                 file=sys.stderr,
                             )
+                            exit_due_to_no_face = True
+                            write_session_summary(
+                                ended_reason="no_face_timeout",
+                                user_label=current_user_name,
+                                cart_product_ids=cart_product_ids,
+                                mood_seconds=mood_seconds,
+                                depth_seconds=depth_seconds,
+                                screen_seconds=screen_seconds,
+                                look_product_seconds=look_product_seconds,
+                                look_cart_item_seconds=look_cart_item_seconds,
+                                last_screen=screen.name,
+                            )
                             break
 
                 gesture = classify_from_result(result.hand_landmarks)
@@ -592,6 +637,18 @@ def main() -> int:
                     novidades_hover_sticky_until = 0.0
                     carrinho_hover_sticky_id = None
                     carrinho_hover_sticky_until = 0.0
+
+                # Métricas de sessão (tempo por seção e tempo olhando itens)
+                if dt < 0.5:
+                    screen_seconds[screen.name] = screen_seconds.get(screen.name, 0.0) + dt
+                    if screen is Screen.NOVIDADES and hover_product_id:
+                        look_product_seconds[hover_product_id] = (
+                            look_product_seconds.get(hover_product_id, 0.0) + dt
+                        )
+                    if screen is Screen.CARRINHO and hover_carrinho_id:
+                        look_cart_item_seconds[hover_carrinho_id] = (
+                            look_cart_item_seconds.get(hover_carrinho_id, 0.0) + dt
+                        )
 
                 fired = stable.tick(gesture)
                 pinch_target_id = hover_product_id
@@ -856,6 +913,55 @@ def main() -> int:
                         )
                         hud_y += depth_row
 
+                # Métricas pedidas: tempo por seção + tempo olhando produtos (HUD no fim)
+                # Mostra apenas os TOP itens para não poluir a tela.
+                def _top_items(d: dict[str, float], n: int = 3) -> list[tuple[str, float]]:
+                    items = [(k, float(v)) for k, v in d.items() if float(v) > 0.15]
+                    items.sort(key=lambda x: x[1], reverse=True)
+                    return items[:n]
+
+                product_labels = {
+                    "aura": "Fones Aura",
+                    "fitneo": "Pulseira",
+                    "caneca": "Caneca",
+                    "lamp": "Lampada",
+                }
+
+                top_screens = _top_items(screen_seconds, n=3)
+                top_products = _top_items(look_product_seconds, n=3)
+
+                # Empilha no rodapé para não brigar com os blocos de humor/profundidade.
+                base_y = fh - 92
+                if top_screens:
+                    txt = "Secoes: " + " | ".join(
+                        f"{k}:{v:.0f}s" for k, v in top_screens
+                    )
+                    cv2.putText(
+                        frame,
+                        txt,
+                        (16, base_y),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.48,
+                        (220, 220, 255),
+                        1,
+                        cv2.LINE_AA,
+                    )
+                    base_y += 22
+                if top_products:
+                    txt2 = "Olhando: " + " | ".join(
+                        f"{product_labels.get(k,k)}:{v:.0f}s" for k, v in top_products
+                    )
+                    cv2.putText(
+                        frame,
+                        txt2,
+                        (16, base_y),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.48,
+                        (220, 255, 220),
+                        1,
+                        cv2.LINE_AA,
+                    )
+
                 if screen is not Screen.MENU:
                     back_msg = "🔙 Voltar: punho fechado ~0,4s"
                     cv2.putText(
@@ -904,6 +1010,9 @@ def main() -> int:
             if face_landmarker_ctx is not None and hasattr(face_landmarker_ctx, "close"):
                 face_landmarker_ctx.close()
             cv2.destroyAllWindows()
+
+    if exit_due_to_no_face:
+        _launch_data_assistant()
 
     return 0
 
