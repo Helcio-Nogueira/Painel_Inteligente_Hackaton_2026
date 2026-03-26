@@ -37,6 +37,13 @@ def _load_fonts():
 
 _FONT_TITLE, _FONT_SUB, _FONT_BODY, _FONT_SMALL = _load_fonts()
 
+try:
+    _FONT_EMOJI = ImageFont.truetype("C:/Windows/Fonts/seguiemj.ttf", 36)
+    _FONT_EMOJI_SM = ImageFont.truetype("C:/Windows/Fonts/seguiemj.ttf", 24)
+except OSError:
+    _FONT_EMOJI = _FONT_TITLE
+    _FONT_EMOJI_SM = _FONT_SUB
+
 # Altura reservada para a barra “como voltar” (telas internas).
 BACK_ZONE_H = 128
 
@@ -182,14 +189,18 @@ def _lerp_color(c1: tuple[int, int, int], c2: tuple[int, int, int], t: float) ->
     )
 
 
-def _gradient_bg(img: Image.Image, top: tuple[int, int, int], bottom: tuple[int, int, int]) -> None:
-    px = img.load()
+def _gradient_bg_diagonal(img: Image.Image,
+                          tl: tuple[int, int, int],
+                          br: tuple[int, int, int]) -> None:
+    """Gradiente diagonal (canto sup-esq → canto inf-dir) via numpy (rápido)."""
     w, h = img.size
-    for y in range(h):
-        t = y / max(h - 1, 1)
-        c = _lerp_color(top, bottom, t)
-        for x in range(w):
-            px[x, y] = c
+    xs = np.linspace(0, 1, w, dtype=np.float32)
+    ys = np.linspace(0, 1, h, dtype=np.float32)
+    t = (ys[:, None] + xs[None, :]) / 2.0
+    tl_arr = np.array(tl, dtype=np.float32)
+    br_arr = np.array(br, dtype=np.float32)
+    pixels = tl_arr + (br_arr - tl_arr) * t[:, :, None]
+    img.paste(Image.fromarray(pixels.astype(np.uint8), "RGB"))
 
 
 def _round_rect(
@@ -201,6 +212,45 @@ def _round_rect(
     width: int = 2,
 ) -> None:
     draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=width)
+
+
+_LOGO_IMG: Image.Image | None = None
+
+
+def _load_logo() -> Image.Image | None:
+    global _LOGO_IMG
+    if _LOGO_IMG is not None:
+        return _LOGO_IMG
+    import os
+    logo_path = os.path.join(os.path.dirname(__file__), "logo_capvivo.png")
+    if not os.path.isfile(logo_path):
+        return None
+    try:
+        logo = Image.open(logo_path).convert("RGBA")
+        target_h = 80
+        ratio = target_h / logo.height
+        target_w = int(logo.width * ratio)
+        _LOGO_IMG = logo.resize((target_w, target_h), Image.LANCZOS)
+        return _LOGO_IMG
+    except Exception:
+        return None
+
+
+def _draw_logo(img: Image.Image, x: int, y: int) -> None:
+    """Cola o PNG do logo Capgemini | vivo no canto superior esquerdo."""
+    logo = _load_logo()
+    if logo is None:
+        return
+    img.paste(logo, (x, y), logo)
+
+
+def _draw_emoji_pair(draw: ImageDraw.ImageDraw, x: int, y: int,
+                     section_emoji: str, gesture_emoji: str) -> None:
+    """Desenha emoji da seção (grande) + emoji do gesto (menor, ao lado)."""
+    draw.text((x, y - 6), section_emoji, font=_FONT_EMOJI, fill=(255, 255, 255),
+              embedded_color=True)
+    draw.text((x + 44, y + 4), gesture_emoji, font=_FONT_EMOJI_SM, fill=(255, 255, 255),
+              embedded_color=True)
 
 
 def render_store(
@@ -217,16 +267,16 @@ def render_store(
     carrinho_hover_id: str | None = None,
 ) -> np.ndarray:
     img = Image.new("RGB", (width, height))
-    _gradient_bg(img, (45, 27, 78), (18, 58, 92))
+    _gradient_bg_diagonal(img, (18, 22, 72), (88, 28, 108))
 
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     od = ImageDraw.Draw(overlay)
-    for i in range(0, width + 120, 140):
-        od.ellipse((i - 60, height // 3, i + 80, height + 100), fill=(255, 200, 120, 25))
+    for i in range(0, width + 140, 160):
+        od.ellipse((i - 70, height // 2, i + 90, height + 120), fill=(120, 80, 200, 18))
     img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
-    draw = ImageDraw.Draw(img)
-
     margin = 28
+    _draw_logo(img, margin, 6)
+    draw = ImageDraw.Draw(img)
 
     if screen is Screen.MENU:
         if greeting_name:
@@ -235,30 +285,30 @@ def render_store(
             (margin, 72 if not greeting_name else 128),
             "O que gostaria de fazer hoje?",
             font=_FONT_SUB,
-            fill=(230, 220, 255),
+            fill=(210, 210, 240),
         )
 
         cards = [
-            ("🆕", "Produtos novos", "Polegar bem para cima (fora do punho)"),
-            ("✌️", "Meu carrinho", "Faça o sinal de paz (2 dedos)"),
-            ("🖐️", "Notícias do dia", "Abra a palma da mão"),
-            ("👆", "Registrar meu rosto", "Aponte só o indicador"),
+            ("🛍️", "👍", "Produtos novos", "Polegar para cima"),
+            ("🛒", "✌️", "Meu carrinho", "Sinal de paz (2 dedos)"),
+            ("📰", "🖐️", "Notícias do dia", "Palma aberta"),
+            ("😊", "👆", "Registrar meu rosto", "Aponte o indicador"),
         ]
         y0 = 188
         gap = 14
         card_h = 102
-        for emoji, title, hint in cards:
+        for sec_emoji, gest_emoji, title, hint in cards:
             _round_rect(
                 draw,
                 (margin, y0, width - margin, y0 + card_h),
                 22,
-                fill=(88, 72, 118),
-                outline=(210, 185, 255),
+                fill=(38, 38, 78),
+                outline=(100, 160, 220),
                 width=2,
             )
-            draw.text((margin + 20, y0 + 18), emoji, font=_FONT_TITLE, fill=(255, 255, 255))
+            _draw_emoji_pair(draw, margin + 14, y0 + 28, sec_emoji, gest_emoji)
             draw.text((margin + 88, y0 + 22), title, font=_FONT_SUB, fill=(255, 255, 255))
-            draw.text((margin + 88, y0 + 58), hint, font=_FONT_SMALL, fill=(220, 210, 245))
+            draw.text((margin + 88, y0 + 58), hint, font=_FONT_SMALL, fill=(180, 190, 220))
             y0 += card_h + gap
 
         _menu_hint_voltar(draw, margin, width, y0 + 12, height)
@@ -267,62 +317,63 @@ def render_store(
             draw,
             (margin, height - 100, width - margin, height - 14),
             16,
-            fill=(32, 28, 52),
-            outline=(255, 195, 130),
+            fill=(25, 25, 50),
+            outline=(100, 160, 220),
             width=1,
         )
         draw.text(
             (margin + 14, height - 82),
             "Dica: use a janela da câmera ao lado para ver sua mão.",
             font=_FONT_SMALL,
-            fill=(255, 230, 200),
+            fill=(180, 190, 220),
         )
 
     elif screen is Screen.NOVIDADES:
-        draw.text((margin, 72), "✨ Novidades", font=_FONT_TITLE, fill=(255, 248, 240))
-        draw.text((margin, 130), "Destaques fresquinhos pra você", font=_FONT_SUB, fill=(200, 230, 255))
+        draw.text((margin, 72), "Novidades", font=_FONT_TITLE, fill=(255, 248, 240))
+        draw.text((margin, 130), "Destaques fresquinhos pra você", font=_FONT_SUB, fill=(180, 200, 240))
         draw.text(
             (margin, 156),
-            "Olhe o produto + 👌 A-OK — cada item só entra uma vez no carrinho",
+            "Olhe o produto + OK ou faça o número com a mão",
             font=_FONT_SMALL,
-            fill=(255, 230, 200),
+            fill=(160, 180, 220),
         )
         in_cart = set(cart_product_ids or [])
         y = NOVIDADES_Y0
-        for pid, em, name, sub in NOVIDADES_PRODUCTS:
+        for idx, (pid, em, name, sub) in enumerate(NOVIDADES_PRODUCTS):
             if y + NOVIDADES_ROW_H > height - BACK_ZONE_H - 8:
                 break
             hover = novidades_hover_id == pid
             added = pid in in_cart
-            fill = (100, 85, 140) if hover else (82, 70, 118)
+            fill_c = (50, 50, 95) if hover else (38, 38, 78)
             if added:
-                fill = (55, 95, 75) if hover else (48, 82, 68)
-            outline = (255, 220, 120) if hover else (200, 195, 240)
+                fill_c = (30, 70, 55) if hover else (25, 60, 48)
+            outline_c = (140, 200, 255) if hover else (100, 160, 220)
             if added:
-                outline = (140, 255, 170) if hover else (100, 200, 130)
+                outline_c = (100, 220, 150) if hover else (80, 180, 120)
             ow = 3 if hover else 2
-            _round_rect(draw, (margin, y, width - margin, y + NOVIDADES_ROW_H), 18, fill, outline, ow)
+            _round_rect(draw, (margin, y, width - margin, y + NOVIDADES_ROW_H), 18, fill_c, outline_c, ow)
+            num_label = f"{idx + 1}."
+            draw.text((margin + 14, y + 28), num_label, font=_FONT_SUB, fill=(140, 200, 255))
             if added:
                 draw.text(
-                    (margin + 20, y + 28),
+                    (margin + 48, y + 28),
                     "Adicionado ao carrinho!",
                     font=_FONT_SUB,
-                    fill=(200, 255, 215),
+                    fill=(160, 240, 190),
                 )
             else:
-                draw.text((margin + 16, y + 20), em, font=_FONT_TITLE, fill=(255, 255, 255))
-                draw.text((margin + 72, y + 18), name, font=_FONT_SUB, fill=(255, 255, 255))
-                draw.text((margin + 72, y + 52), sub, font=_FONT_SMALL, fill=(210, 220, 255))
+                draw.text((margin + 48, y + 18), name, font=_FONT_SUB, fill=(255, 255, 255))
+                draw.text((margin + 48, y + 52), sub, font=_FONT_SMALL, fill=(160, 180, 220))
             y += NOVIDADES_ROW_GAP
         _draw_barra_voltar(draw, margin, width, height)
 
     elif screen is Screen.CARRINHO:
-        draw.text((margin, 72), "🛒 Seu carrinho", font=_FONT_TITLE, fill=(255, 248, 240))
+        draw.text((margin, 72), "Seu carrinho", font=_FONT_TITLE, fill=(255, 248, 240))
         draw.text(
             (margin, 128),
-            "Olhe o item + 👌 A-OK para remover do carrinho",
+            "Olhe o item + OK para remover",
             font=_FONT_SMALL,
-            fill=(255, 230, 200),
+            fill=(160, 180, 220),
         )
         c_ids = list(cart_product_ids or [])
         if not c_ids:
@@ -330,22 +381,22 @@ def render_store(
                 draw,
                 (margin, 168, width - margin, height - BACK_ZONE_H - 24),
                 24,
-                (58, 72, 98),
-                (110, 210, 170),
+                (38, 38, 78),
+                (100, 160, 220),
                 2,
             )
             draw.text((margin + 24, 228), "Tudo tranquilo por aqui!", font=_FONT_SUB, fill=(255, 255, 255))
             draw.text(
                 (margin + 24, 264),
-                "Em Novidades, olhe um produto e faça o gesto 👌 A-OK",
+                "Em Novidades, selecione produtos com a mão",
                 font=_FONT_BODY,
-                fill=(220, 235, 255),
+                fill=(180, 200, 240),
             )
             draw.text(
                 (margin + 24, 290),
-                "para adicionar ao carrinho.",
+                "ou olhe + OK para adicionar ao carrinho.",
                 font=_FONT_BODY,
-                fill=(220, 235, 255),
+                fill=(180, 200, 240),
             )
         else:
             y = CARRINHO_LIST_Y0
@@ -353,21 +404,20 @@ def render_store(
                 if y + CARRINHO_ROW_H > height - BACK_ZONE_H - 24:
                     break
                 row = product_row(pid)
-                em, name, sub = ("📦", product_label(pid), "") if row is None else (row[1], row[2], row[3])
+                em, name, sub = ("", product_label(pid), "") if row is None else (row[1], row[2], row[3])
                 hover = carrinho_hover_id == pid
-                fill = (88, 105, 135) if hover else (70, 88, 118)
-                outline = (255, 200, 120) if hover else (130, 200, 255)
+                fill_c = (50, 50, 95) if hover else (38, 38, 78)
+                outline_c = (140, 200, 255) if hover else (100, 160, 220)
                 ow = 3 if hover else 2
-                _round_rect(draw, (margin, y, width - margin, y + CARRINHO_ROW_H), 16, fill, outline, ow)
-                draw.text((margin + 14, y + 10), em, font=_FONT_TITLE, fill=(255, 255, 255))
-                draw.text((margin + 64, y + 8), name, font=_FONT_SUB, fill=(255, 255, 255))
+                _round_rect(draw, (margin, y, width - margin, y + CARRINHO_ROW_H), 16, fill_c, outline_c, ow)
+                draw.text((margin + 16, y + 12), name, font=_FONT_SUB, fill=(255, 255, 255))
                 if sub:
-                    draw.text((margin + 64, y + 32), sub, font=_FONT_SMALL, fill=(210, 220, 255))
+                    draw.text((margin + 16, y + 34), sub, font=_FONT_SMALL, fill=(160, 180, 220))
                 y += CARRINHO_ROW_H + CARRINHO_ROW_GAP
         _draw_barra_voltar(draw, margin, width, height)
 
     elif screen is Screen.NOTICIAS:
-        draw.text((margin, 72), "📰 Notícias do dia", font=_FONT_TITLE, fill=(255, 248, 240))
+        draw.text((margin, 72), "Notícias do dia", font=_FONT_TITLE, fill=(255, 248, 240))
         news = [
             "Tech: IA generativa acelera protótipos em hackathons.",
             "Lifestyle: cafeterias com desconto para quem usa transporte verde.",
@@ -377,13 +427,13 @@ def render_store(
         for line in news:
             if y + 76 > height - BACK_ZONE_H - 8:
                 break
-            _round_rect(draw, (margin, y, width - margin, y + 72), 16, (78, 65, 102), (230, 165, 115), 2)
-            draw.text((margin + 18, y + 22), line, font=_FONT_SMALL, fill=(255, 252, 245))
+            _round_rect(draw, (margin, y, width - margin, y + 72), 16, (38, 38, 78), (100, 160, 220), 2)
+            draw.text((margin + 18, y + 22), line, font=_FONT_SMALL, fill=(220, 225, 240))
             y += 84
         _draw_barra_voltar(draw, margin, width, height)
 
     elif screen is Screen.REGISTRAR:
-        draw.text((margin, 72), "👤 Registrar rosto", font=_FONT_TITLE, fill=(255, 248, 240))
+        draw.text((margin, 72), "Registrar rosto", font=_FONT_TITLE, fill=(255, 248, 240))
         if register_countdown is not None and register_countdown > 0:
             sec = int(register_countdown) + 1
             draw.text(
@@ -429,15 +479,15 @@ def render_store(
             draw,
             (width - margin - pill_w, 16, width - margin, 54),
             16,
-            fill=(25, 35, 55),
-            outline=(120, 255, 190),
+            fill=(25, 30, 55),
+            outline=(80, 200, 160),
             width=1,
         )
         draw.text(
             (width - margin - pill_w + 12, 26),
             gesture_label[:52],
             font=_FONT_SMALL,
-            fill=(170, 255, 210),
+            fill=(140, 230, 190),
         )
 
     if gaze_xy is not None:
@@ -461,13 +511,13 @@ def _menu_hint_voltar(
 ) -> None:
     """Lembrete no menu: como voltar quando estiver dentro de uma seção."""
     box = (margin, top, width - margin, top + 72)
-    _round_rect(draw, box, 18, (55, 42, 85), (255, 165, 90), 2)
-    draw.text((margin + 16, top + 12), "↩ Voltar à tela anterior", font=_FONT_SUB, fill=(255, 230, 200))
+    _round_rect(draw, box, 18, (30, 30, 60), (100, 160, 220), 2)
+    draw.text((margin + 16, top + 12), "Voltar à tela anterior", font=_FONT_SUB, fill=(200, 210, 240))
     draw.text(
         (margin + 16, top + 40),
-        "Dentro de Novidades, Carrinho ou Notícias: use 🔙 punho fechado (~0,5 s) → volta ao menu.",
+        "Nas telas internas: punho fechado (~0,5 s) volta ao menu.",
         font=_FONT_SMALL,
-        fill=(235, 220, 255),
+        fill=(160, 180, 220),
     )
 
 
@@ -478,30 +528,22 @@ def _draw_barra_voltar(draw: ImageDraw.ImageDraw, margin: int, width: int, heigh
         draw,
         (margin, top, width - margin, height - 10),
         20,
-        fill=(42, 28, 58),
-        outline=(255, 160, 80),
-        width=3,
+        fill=(28, 28, 55),
+        outline=(100, 160, 220),
+        width=2,
     )
-    draw.text((margin + 14, top + 8), "🔙", font=_FONT_TITLE, fill=(255, 230, 160))
-    draw.text((margin + 58, top + 10), "VOLTAR", font=_FONT_SUB, fill=(255, 200, 130))
-    draw.text((margin + 168, top + 8), "✊", font=_FONT_TITLE, fill=(255, 255, 255))
-    draw.text(
-        (margin + 226, top + 12),
-        "Gesto para voltar à tela anterior",
-        font=_FONT_SUB,
-        fill=(255, 248, 240),
-    )
+    draw.text((margin + 14, top + 14), "VOLTAR", font=_FONT_SUB, fill=(180, 200, 240))
     draw.text(
         (margin + 14, top + 46),
         "Feche a mão (punho). Mantenha firme cerca de meio segundo.",
         font=_FONT_BODY,
-        fill=(220, 210, 245),
+        fill=(160, 180, 220),
     )
     draw.text(
         (margin + 14, top + 72),
-        "→ Retorna ao menu principal (tela anterior neste fluxo).",
+        "Retorna ao menu principal.",
         font=_FONT_SMALL,
-        fill=(180, 255, 200),
+        fill=(130, 170, 210),
     )
 
 

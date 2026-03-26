@@ -35,8 +35,10 @@ from tkinter import simpledialog
 from face_registry import clear_registry, encode_face, recognize_face, register_face_multiple_encodings
 from session_export import write_session_summary
 from gestures import Gesture, classify_from_result
+import voice as voice_mod
 from store_ui import (
     Screen,
+    NOVIDADES_PRODUCTS,
     render_store,
     resolve_carrinho_hover,
     resolve_novidades_hover,
@@ -137,10 +139,18 @@ GESTURE_HINT = {
     Gesture.NONE: "Mostre um gesto…",
     Gesture.THUMB_UP: "🆕 Novidades — polegar para cima",
     Gesture.PEACE: "✌️ Carrinho — sinal de paz",
+    Gesture.THREE_FINGERS: "🤟 3 dedos",
     Gesture.OPEN_PALM: "🖐️ Noticias — palma aberta",
     Gesture.FIST: "🔙 Voltar — punho fechado",
     Gesture.INDEX_POINT: "👆 Registrar rosto — aponte o indicador",
-    Gesture.PINCH_OK: "👌 Novidades — A-OK: O com polegar+indicador, médio/anelar/mindinho esticados",
+    Gesture.PINCH_OK: "👌 A-OK: O com polegar+indicador",
+}
+
+FINGER_TO_PRODUCT = {
+    Gesture.INDEX_POINT: 0,
+    Gesture.PEACE: 1,
+    Gesture.THREE_FINGERS: 2,
+    Gesture.OPEN_PALM: 3,
 }
 
 
@@ -555,8 +565,12 @@ def main() -> int:
 
     clear_registry()
 
+    voice_mod.start_audio_monitor()
+    voice_mod.start_greeting()
+
     t0 = time.perf_counter()
     screen = Screen.MENU
+    prev_screen = Screen.MENU
     # Pinça/👌: menos frames que punho/paz + cooldown curto para repetir compra
     stable = StableGesture(need=7, cooldown=14, pinch_need=3, pinch_cooldown=8)
     first_layout = True
@@ -644,6 +658,7 @@ def main() -> int:
                                 file=sys.stderr,
                             )
                             exit_due_to_no_face = True
+                            voice_mod.narrate_goodbye()
                             write_session_summary(
                                 ended_reason="no_face_timeout",
                                 user_label=current_user_name,
@@ -706,22 +721,40 @@ def main() -> int:
 
                 fired = stable.tick(gesture)
                 pinch_target_id = hover_product_id
+
+                # Seleção por dedos na tela NOVIDADES (1-4 dedos → produto 1-4)
                 if (
+                    fired is not None
+                    and screen is Screen.NOVIDADES
+                    and fired in FINGER_TO_PRODUCT
+                ):
+                    prod_idx = FINGER_TO_PRODUCT[fired]
+                    if prod_idx < len(NOVIDADES_PRODUCTS):
+                        prod_id = NOVIDADES_PRODUCTS[prod_idx][0]
+                        if prod_id not in cart_product_ids:
+                            cart_product_ids.append(prod_id)
+                            voice_mod.narrate_cart_add(prod_id)
+
+                elif (
                     fired is Gesture.PINCH_OK
                     and screen is Screen.NOVIDADES
                     and pinch_target_id
                     and pinch_target_id not in cart_product_ids
                 ):
                     cart_product_ids.append(pinch_target_id)
+                    voice_mod.narrate_cart_add(pinch_target_id)
                 elif (
                     fired is Gesture.PINCH_OK
                     and screen is Screen.CARRINHO
                     and hover_carrinho_id
                 ):
+                    removed_id = hover_carrinho_id
                     try:
                         cart_product_ids.remove(hover_carrinho_id)
                     except ValueError:
-                        pass
+                        removed_id = None
+                    if removed_id:
+                        voice_mod.narrate_cart_remove(removed_id)
                 elif fired is not None:
                     screen = _apply_navigation(screen, fired)
                     if screen is Screen.MENU and register_countdown_start is not None:
@@ -733,7 +766,7 @@ def main() -> int:
                     lm_list = face_landmarks_for_draw[0]
                     if len(lm_list) >= 468 and screen is not Screen.REGISTRAR:
                         rec = recognize_face(list(lm_list))
-                        current_user_name = rec if rec else "Visitante 1"
+                        current_user_name = rec if rec else (voice_mod.get_voice_name() or "Visitante 1")
                     if face_blendshapes_for_mood and len(face_blendshapes_for_mood) > 0:
                         mood_text, mood_color = _estimate_mood_from_blendshapes(face_blendshapes_for_mood[0])
                     elif len(lm_list) >= 468:
@@ -819,6 +852,11 @@ def main() -> int:
                         register_encodings.clear()
                         register_feedback = "Posicione seu rosto na câmera"
 
+                # Narração por voz: tela
+                if screen != prev_screen:
+                    voice_mod.narrate_screen_change(screen.name, cart_product_ids)
+                    prev_screen = screen
+
                 hand_count = len(result.hand_landmarks)
                 if hand_count:
                     _draw_hands(frame, result.hand_landmarks)
@@ -876,6 +914,21 @@ def main() -> int:
                     ges_col,
                     2 if gesture is Gesture.PINCH_OK else 1,
                     cv2.LINE_AA,
+                )
+                hud_y += hud_lh + 4
+
+                # Barra de intensidade do microfone
+                mic_level = voice_mod.get_audio_level()
+                bar_x, bar_w, bar_h = 16, 200, 14
+                cv2.rectangle(frame, (bar_x, hud_y), (bar_x + bar_w, hud_y + bar_h), (60, 60, 60), -1)
+                fill_w = int(bar_w * mic_level)
+                if fill_w > 0:
+                    bar_color = (0, 255, 80) if mic_level < 0.6 else (0, 200, 255) if mic_level < 0.85 else (0, 0, 255)
+                    cv2.rectangle(frame, (bar_x, hud_y), (bar_x + fill_w, hud_y + bar_h), bar_color, -1)
+                cv2.putText(
+                    frame, f"Mic: {int(mic_level * 100)}%",
+                    (bar_x + bar_w + 8, hud_y + 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1, cv2.LINE_AA,
                 )
                 hud_y += hud_lh + 4
 
@@ -1060,6 +1113,7 @@ def main() -> int:
                 if key in (ord("q"), ord("Q"), 27):
                     break
         finally:
+            voice_mod.shutdown()
             cap.release()
             if face_landmarker_ctx is not None and hasattr(face_landmarker_ctx, "close"):
                 face_landmarker_ctx.close()

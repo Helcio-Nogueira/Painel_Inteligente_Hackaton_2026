@@ -484,7 +484,7 @@ function addMessage(role, content, sources = null, save = true) {
         avatar.textContent = 'Você';
     } else {
         // Usar imagem da Capgemini como avatar para IA
-        avatar.innerHTML = '<img src="capgemini-icon.png.png" alt="CapBot" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%; display: block;">';
+        avatar.innerHTML = '<img src="logo_capvivo.png?v=2" alt="CapBot" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%; display: block;">';
         
         // Debug: verificar se a imagem carregou
         const avatarImg = avatar.querySelector('img');

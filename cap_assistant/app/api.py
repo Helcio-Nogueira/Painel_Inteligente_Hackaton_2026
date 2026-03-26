@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 import httpx
 
 from app.config import Config
@@ -176,23 +177,7 @@ if _FRONTEND_EXISTS:
     async def root_index() -> FileResponse:
         return FileResponse(_FRONTEND / "index.html")
 
-    @app.get("/{file_path:path}")
-    async def serve_frontend(file_path: str) -> FileResponse:
-        allowed = {
-            "style.css",
-            "script.js",
-            "capgemini-logo.png.png",
-            "capgemini-icon.png.png",
-            "index.html",
-            "test.html",
-            "capgemini-logo.svg",
-            "capgemini-icon.svg",
-        }
-        if file_path in allowed:
-            loc = _FRONTEND / file_path
-            if loc.is_file():
-                return FileResponse(loc)
-        return FileResponse(_FRONTEND / "index.html")
+    app.mount("/", StaticFiles(directory=str(_FRONTEND)), name="frontend_static")
 
 
 else:

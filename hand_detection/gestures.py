@@ -10,11 +10,12 @@ from typing import Any
 class Gesture(Enum):
     NONE = "none"
     THUMB_UP = "thumb_up"  # novidades
-    PEACE = "peace"  # carrinho
-    OPEN_PALM = "open_palm"  # notícias
+    PEACE = "peace"  # carrinho (menu) / produto 2 (novidades)
+    THREE_FINGERS = "three_fingers"  # produto 3 (novidades)
+    OPEN_PALM = "open_palm"  # notícias (menu) / produto 4 (novidades)
     FIST = "fist"  # voltar
-    INDEX_POINT = "index_point"  # registrar rosto (apenas indicador)
-    PINCH_OK = "pinch_ok"  # 👌 A-OK (referência visual) — Novidades + olhar no produto
+    INDEX_POINT = "index_point"  # registrar rosto (menu) / produto 1 (novidades)
+    PINCH_OK = "pinch_ok"  # 👌 A-OK — adicionar produto olhado ao carrinho
 
 
 def _dist(a: Any, b: Any) -> float:
@@ -135,6 +136,10 @@ def classify_hand(lm: list) -> Gesture:
     # 2) Paz: indicador + médio; anelar e mindinho recolhidos
     if i and m and not r and not p:
         return Gesture.PEACE
+
+    # 2b) Três dedos: indicador + médio + anelar; mindinho recolhido
+    if i and m and r and not p:
+        return Gesture.THREE_FINGERS
 
     # 3) Só polegar para cima, demais recolhidos
     if t and not i and not m and not r and not p:

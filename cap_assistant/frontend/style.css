@@ -352,9 +352,10 @@ body {
 }
 
 .capgemini-logo {
-    height: 48px;
+    height: 40px;
     width: auto;
     margin: 0;
+    object-fit: contain;
 }
 
 .capgemini-icon {
@@ -371,8 +372,9 @@ body {
 
 .capgemini-icon-header {
     height: 32px;
-    width: 32px;
+    width: auto;
     margin-right: 12px;
+    object-fit: contain;
 }
 
 .capgemini-link {
