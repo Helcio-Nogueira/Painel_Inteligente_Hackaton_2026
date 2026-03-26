@@ -437,7 +437,7 @@ def _screen_title(s: Screen) -> str:
         Screen.NOVIDADES: "Novidades",
         Screen.CARRINHO: "Carrinho",
         Screen.NOTICIAS: "Noticias",
-        Screen.REGISTRAR: "Registrar",
+        Screen.REGISTRAR: "Atendente",
     }[s]
 
 
@@ -511,6 +511,44 @@ def _launch_mobile_relay() -> subprocess.Popen | None:
     else:
         print("[AVISO] Site do celular nao respondeu a tempo.", file=sys.stderr)
     return proc
+
+
+def _send_attendant_call(client_name: str) -> None:
+    """Envia chamado de atendente ao mobile_relay (fire-and-forget)."""
+    import threading
+    name = client_name or "Visitante"
+    msg = f"Um cliente ({name}) está chamando no setor da loja."
+    def _post():
+        try:
+            import urllib.request, json as _j
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{MOBILE_RELAY_PORT}/call",
+                data=_j.dumps({"message": msg}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=3)
+        except Exception:
+            pass
+    threading.Thread(target=_post, daemon=True).start()
+
+
+def _clear_attendant_call() -> None:
+    """Limpa chamado de atendente no mobile_relay (fire-and-forget)."""
+    import threading
+    def _post():
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{MOBILE_RELAY_PORT}/call/clear",
+                data=b"",
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=3)
+        except Exception:
+            pass
+    threading.Thread(target=_post, daemon=True).start()
 
 
 def main() -> int:
@@ -797,64 +835,72 @@ def main() -> int:
                 else:
                     depth_iod_smooth = None
 
-                # Fluxo de registro na tela REGISTRAR
-                if screen is Screen.REGISTRAR and face_landmarks_for_draw and len(face_landmarks_for_draw) > 0:
-                    lm_list = face_landmarks_for_draw[0]
-                    if len(lm_list) >= 468:
-                        REGISTER_DURATION = 5.0
-                        now = time.perf_counter()
-                        quality_ok, register_feedback = check_face_quality(frame, list(lm_list))
-                        if register_countdown_start is None:
-                            register_countdown_start = now
-                            register_encodings.clear()
-                        if quality_ok:
-                            elapsed = now - register_countdown_start
-                            register_countdown = max(0.0, REGISTER_DURATION - elapsed)
-                            if len(register_encodings) < 25:
-                                enc = encode_face(list(lm_list))
-                                if enc:
-                                    register_encodings.append(enc)
-                        else:
-                            register_countdown = REGISTER_DURATION if register_countdown_start else None
-                        if register_countdown <= 0:
-                            encodings_to_save = list(register_encodings)
-                            if not encodings_to_save:
-                                enc = encode_face(list(lm_list))
-                                if enc:
-                                    encodings_to_save = [enc]
-                            if encodings_to_save:
-                                root = tk.Tk()
-                                root.withdraw()
-                                root.attributes("-topmost", True)
-                                name = simpledialog.askstring(
-                                    "Nome",
-                                    "Digite o nome para este rosto:",
-                                    parent=root,
-                                )
-                                root.destroy()
-                                if name is not None and name.strip():
-                                    if register_face_multiple_encodings(encodings_to_save, name.strip()):
-                                        current_user_name = name.strip()
-                            screen = Screen.MENU
-                            register_countdown_start = None
-                            register_countdown = None
-                            register_encodings.clear()
-                            register_feedback = ""
-                    else:
-                        register_countdown_start = None
-                        register_countdown = None
-                        register_encodings.clear()
-                        register_feedback = "Aguardando rosto..."
-                else:
-                    if screen is Screen.REGISTRAR:
-                        register_countdown_start = None
-                        register_countdown = None
-                        register_encodings.clear()
-                        register_feedback = "Posicione seu rosto na câmera"
+                # Fluxo de registro facial desativado (tela agora é "chamar atendente").
+                # O código original está preservado abaixo, comentado, para reativação futura.
+                # --- INÍCIO BLOCO REGISTRO (desativado) ---
+                # if screen is Screen.REGISTRAR and face_landmarks_for_draw and len(face_landmarks_for_draw) > 0:
+                #     lm_list = face_landmarks_for_draw[0]
+                #     if len(lm_list) >= 468:
+                #         REGISTER_DURATION = 5.0
+                #         now = time.perf_counter()
+                #         quality_ok, register_feedback = check_face_quality(frame, list(lm_list))
+                #         if register_countdown_start is None:
+                #             register_countdown_start = now
+                #             register_encodings.clear()
+                #         if quality_ok:
+                #             elapsed = now - register_countdown_start
+                #             register_countdown = max(0.0, REGISTER_DURATION - elapsed)
+                #             if len(register_encodings) < 25:
+                #                 enc = encode_face(list(lm_list))
+                #                 if enc:
+                #                     register_encodings.append(enc)
+                #         else:
+                #             register_countdown = REGISTER_DURATION if register_countdown_start else None
+                #         if register_countdown <= 0:
+                #             encodings_to_save = list(register_encodings)
+                #             if not encodings_to_save:
+                #                 enc = encode_face(list(lm_list))
+                #                 if enc:
+                #                     encodings_to_save = [enc]
+                #             if encodings_to_save:
+                #                 root = tk.Tk()
+                #                 root.withdraw()
+                #                 root.attributes("-topmost", True)
+                #                 name = simpledialog.askstring(
+                #                     "Nome",
+                #                     "Digite o nome para este rosto:",
+                #                     parent=root,
+                #                 )
+                #                 root.destroy()
+                #                 if name is not None and name.strip():
+                #                     if register_face_multiple_encodings(encodings_to_save, name.strip()):
+                #                         current_user_name = name.strip()
+                #             screen = Screen.MENU
+                #             register_countdown_start = None
+                #             register_countdown = None
+                #             register_encodings.clear()
+                #             register_feedback = ""
+                #     else:
+                #         register_countdown_start = None
+                #         register_countdown = None
+                #         register_encodings.clear()
+                #         register_feedback = "Aguardando rosto..."
+                # else:
+                #     if screen is Screen.REGISTRAR:
+                #         register_countdown_start = None
+                #         register_countdown = None
+                #         register_encodings.clear()
+                #         register_feedback = "Posicione seu rosto na câmera"
+                # --- FIM BLOCO REGISTRO (desativado) ---
 
                 # Narração por voz: tela
                 if screen != prev_screen:
                     voice_mod.narrate_screen_change(screen.name, cart_product_ids)
+                    # Chamado de atendente via mobile_relay
+                    if screen is Screen.REGISTRAR:
+                        _send_attendant_call(current_user_name)
+                    elif prev_screen is Screen.REGISTRAR:
+                        _clear_attendant_call()
                     prev_screen = screen
 
                 hand_count = len(result.hand_landmarks)
@@ -917,20 +963,19 @@ def main() -> int:
                 )
                 hud_y += hud_lh + 4
 
-                # Barra de intensidade do microfone
-                mic_level = voice_mod.get_audio_level()
-                bar_x, bar_w, bar_h = 16, 200, 14
-                cv2.rectangle(frame, (bar_x, hud_y), (bar_x + bar_w, hud_y + bar_h), (60, 60, 60), -1)
-                fill_w = int(bar_w * mic_level)
-                if fill_w > 0:
-                    bar_color = (0, 255, 80) if mic_level < 0.6 else (0, 200, 255) if mic_level < 0.85 else (0, 0, 255)
-                    cv2.rectangle(frame, (bar_x, hud_y), (bar_x + fill_w, hud_y + bar_h), bar_color, -1)
-                cv2.putText(
-                    frame, f"Mic: {int(mic_level * 100)}%",
-                    (bar_x + bar_w + 8, hud_y + 12),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1, cv2.LINE_AA,
-                )
-                hud_y += hud_lh + 4
+                # Barra de intensidade do microfone (visual desativado)
+                # mic_level = voice_mod.get_audio_level()
+                # bar_x, bar_w, bar_h = 16, 200, 14
+                # cv2.rectangle(frame, (bar_x, hud_y), (bar_x + bar_w, hud_y + bar_h), (60, 60, 60), -1)
+                # fill_w = int(bar_w * mic_level)
+                # if fill_w > 0:
+                #     bar_color = (0, 255, 80) if mic_level < 0.6 else (0, 200, 255) if mic_level < 0.85 else (0, 0, 255)
+                #     cv2.rectangle(frame, (bar_x, hud_y), (bar_x + fill_w, hud_y + bar_h), bar_color, -1)
+                # cv2.putText(
+                #     frame, f"Mic: {int(mic_level * 100)}%",
+                #     (bar_x + bar_w + 8, hud_y + 12),
+                #     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1, cv2.LINE_AA,
+                # )
 
                 if current_user_name:
                     hello_cam = f"Ola {current_user_name}!"

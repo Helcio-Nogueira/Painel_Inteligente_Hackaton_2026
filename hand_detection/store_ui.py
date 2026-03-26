@@ -292,7 +292,7 @@ def render_store(
             ("🛍️", "👍", "Produtos novos", "Polegar para cima"),
             ("🛒", "✌️", "Meu carrinho", "Sinal de paz (2 dedos)"),
             ("📰", "🖐️", "Notícias do dia", "Palma aberta"),
-            ("😊", "👆", "Registrar meu rosto", "Aponte o indicador"),
+            ("🙋", "👆", "Chamar atendente", "Aponte o indicador"),
         ]
         y0 = 188
         gap = 14
@@ -433,44 +433,23 @@ def render_store(
         _draw_barra_voltar(draw, margin, width, height)
 
     elif screen is Screen.REGISTRAR:
-        draw.text((margin, 72), "Registrar rosto", font=_FONT_TITLE, fill=(255, 248, 240))
-        if register_countdown is not None and register_countdown > 0:
-            sec = int(register_countdown) + 1
-            draw.text(
-                (margin, 140),
-                f"Posicione seu rosto na câmera e aguarde... {sec}s",
-                font=_FONT_SUB,
-                fill=(255, 230, 180),
-            )
-            if register_feedback:
-                draw.text(
-                    (margin, 172),
-                    f"→ {register_feedback}",
-                    font=_FONT_SMALL,
-                    fill=(255, 210, 140),
-                )
-            _round_rect(
-                draw,
-                (margin, 200, width - margin, 260),
-                16,
-                fill=(60, 45, 90),
-                outline=(200, 150, 255),
-                width=2,
-            )
-            pct = max(0, 1.0 - register_countdown / 5.0)
-            bar_w = (width - 2 * margin - 32) * pct
-            draw.rectangle(
-                (margin + 16, 218, margin + 16 + int(bar_w), 242),
-                fill=(150, 100, 255),
-            )
-        else:
-            msg = register_feedback or "Aguardando rosto... Posicione-se na câmera."
-            draw.text(
-                (margin, 140),
-                msg,
-                font=_FONT_SUB,
-                fill=(255, 230, 180),
-            )
+        draw.text((margin, 72), "Chamar atendente", font=_FONT_TITLE, fill=(255, 248, 240))
+        draw.text(
+            (margin, 160),
+            "Aguarde um momento,",
+            font=_FONT_SUB,
+            fill=(255, 230, 180),
+        )
+        draw.text(
+            (margin, 190),
+            "o atendente já está chegando.",
+            font=_FONT_SUB,
+            fill=(255, 230, 180),
+        )
+        draw.text((margin, 250), "✊", font=_FONT_EMOJI, fill=(255, 255, 255),
+                  embedded_color=True)
+        draw.text((margin + 48, 254), "Punho fechado para cancelar", font=_FONT_SMALL,
+                  fill=(180, 190, 220))
         _draw_barra_voltar(draw, margin, width, height)
 
     if gesture_label:

@@ -368,7 +368,7 @@ _MENU_EXPLANATION = (
     "Para ver os produtos novos, faça um joinha. "
     "Para abrir o carrinho, faça o sinal da paz. "
     "Para ver notícias, abra a palma da mão. "
-    "Para registrar seu rosto, aponte o dedo indicador. "
+    "Para chamar um atendente, aponte o dedo indicador. "
     "Agora é com você!"
 )
 
@@ -433,7 +433,7 @@ def narrate_screen_change(screen_name: str, cart_product_ids: list[str] | None =
         speak(
             "Você está no menu principal. "
             "Joinha para produtos, paz para carrinho, "
-            "palma aberta para notícias, indicador para registrar rosto."
+            "palma aberta para notícias, indicador para chamar atendente."
         )
 
     elif screen_name == "NOVIDADES":
@@ -479,8 +479,8 @@ def narrate_screen_change(screen_name: str, cart_product_ids: list[str] | None =
 
     elif screen_name == "REGISTRAR":
         speak(
-            "Vamos registrar seu rosto. "
-            "Fique parado e olhe para a câmera."
+            "Chamando um atendente. "
+            "Aguarde um momento, por favor."
         )
 
 
